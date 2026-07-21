@@ -1,0 +1,377 @@
+// Wicom Move — schema dữ liệu
+// Chạy: npx prisma db push (tạo bảng) rồi npm run db:seed (nạp rule + campaign mặc định)
+
+generator client {
+  provider      = "prisma-client-js"
+  // "native" cho máy dev; "rhel-openssl-3.0.x" cho runtime serverless của Vercel (tránh lỗi thiếu engine khi deploy).
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Nhân sự Wicom — tạo/đăng nhập qua Lark SSO
+model Employee {
+  id         String   @id @default(cuid())
+  larkOpenId String   @unique // định danh người dùng trong Lark
+  larkUnionId String? @unique
+  name       String
+  email      String?
+  avatarUrl  String?
+  team       String? // phòng ban (đồng bộ từ Lark nếu có, hoặc gán tay)
+  title      String? // chức vụ (vd. "CEO", "Trưởng phòng Marketing")
+  isAdmin    Boolean  @default(false) // super admin (CEO) — cấp được quyền HR
+  isHR       Boolean  @default(false) // HR — thấy & cấu hình HR Setting (admin cấp; không tự cấp quyền cho người khác)
+  larkNotifyReaction Boolean @default(true) // nhận DM Lark khi có người thả cảm xúc lên hoạt động của mình
+  createdAt  DateTime @default(now())
+  lastLogin  DateTime @default(now())
+
+  // WiThanks — hệ "khoai" 🥔 cảm ơn/ghi nhận (Model 2 hai ví)
+  khoaiBalance Int    @default(50) // ví NHẬN: số dư tích luỹ để đổi quà (khởi tạo 50 khi vào công ty)
+  wiRole       String @default("staff") // staff | leader (admin dùng cờ isAdmin)
+
+  // Wicer Experience — hồ sơ nhân sự (nguồn cho Wicer Home)
+  birthday       DateTime? // ngày sinh (dùng cho vùng "sinh nhật tuần này")
+  joinedAt       DateTime? // ngày vào công ty thực (fallback createdAt nếu null) — dùng cho kỷ niệm + khoai thâm niên
+  leftAt         DateTime? // ngày rời công ty (null = đang làm) — loại khỏi bảng xếp hạng/nhịp công ty
+  athleticTitles String[] @default([]) // keys danh hiệu thể lực đã đạt (admin set thủ công / verify)
+
+  stravaAccount StravaAccount?
+  activities    Activity[]
+  reactions     Reaction[]
+  goals         Goal[]
+  comments      Comment[]
+  thanksSent     ThanksGift[] @relation("thanksSender")
+  thanksReceived ThanksGift[] @relation("thanksReceiver")
+  redemptions    Redemption[]
+  cardDraws      CardDraw[]
+  khoaiTx        KhoaiTransaction[]
+  thanksHearts   ThanksHeart[]
+  contributions  Contribution[]
+  fulfillments   Fulfillment[] @relation("fulfillBeneficiary")
+  notes          EmployeeNote[] @relation("empNotes")
+  notesAuthored  EmployeeNote[] @relation("empNoteAuthor")
+}
+
+/// Wicer Card — bộ thẻ cảm hứng/văn hoá (hiện ở Wicer Home khi không có lời cảm ơn mới)
+model WicerCard {
+  id          String   @id @default(cuid())
+  message     String
+  category    String   @default("Văn hoá") // loại/chủ đề thẻ: Biết ơn | Sức khoẻ | Văn hoá | Cải tiến | Special | (admin tự thêm)
+  emoji       String   @default("🌿")
+  background  String?  // nền tuỳ chọn: URL ảnh (/uploads/…) hoặc chuỗi CSS gradient/màu
+  rarity      String   @default("common") // common | rare | legendary
+  rewardKhoai Int      @default(0) // lá hiếm/huyền thoại thưởng khoai khi lật trúng
+  active      Boolean  @default(true)
+  sortOrder   Int      @default(100)
+  createdAt   DateTime @default(now())
+  draws       CardDraw[]
+}
+
+/// Wicer Card — 1 lượt lật thẻ (1 lá/ngày/người) + bộ sưu tập (snapshot để hiển thị dù thẻ gốc đổi)
+model CardDraw {
+  id          String    @id @default(cuid())
+  employeeId  String
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  cardId      String
+  card        WicerCard @relation(fields: [cardId], references: [id])
+  dateKey     String // YYYY-MM-DD (giờ VN) — chặn lật quá 1 lá/ngày
+  emoji       String
+  message     String
+  category    String
+  background  String? // snapshot nền lúc lật (giữ nguyên dù thẻ gốc đổi/xoá)
+  rarity      String
+  rewardKhoai Int      @default(0)
+  favorite    Boolean  @default(false) // user đánh dấu "thẻ ý nghĩa nhất"
+  removed     Boolean  @default(false) // user tự ẩn thẻ khỏi bộ sưu tập (có thể khôi phục)
+  drawnAt     DateTime @default(now())
+
+  @@unique([employeeId, dateKey])
+  @@index([employeeId, drawnAt])
+}
+
+/// Liên kết Strava của một nhân sự (token được mã hoá ở tầng ứng dụng trước khi lưu)
+model StravaAccount {
+  id           String    @id @default(cuid())
+  employeeId   String    @unique
+  employee     Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  athleteId    String    @unique // Strava athlete id (lưu dạng String để tránh lỗi BigInt JSON)
+  accessToken  String // token đọc API (sống ~6h) — nên mã hoá at rest
+  refreshToken String // dùng làm mới access token
+  expiresAt    Int // unix seconds thời điểm access token hết hạn
+  scope        String?
+  connectedAt  DateTime  @default(now())
+  revokedAt    DateTime? // set khi nhân sự rút quyền
+}
+
+/// Mỗi dòng = 1 hoạt động lấy từ Strava
+model Activity {
+  id          String   @id @default(cuid())
+  stravaId    String?  @unique // activity id từ Strava — chống trùng (null với hoạt động gửi tay)
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  name        String? // tên buổi tập trên Strava (vd. "Chạy sáng Hồ Tây")
+  type        String // đã chuẩn hoá: Run | Ride | Walk | Swim | Hike | Yoga | Other
+  rawType     String? // sport_type gốc của Strava
+  distanceKm  Float    @default(0)
+  movingTimeS Int      @default(0)
+  startDate   DateTime
+  isManual    Boolean  @default(false) // Strava đánh dấu nhập tay
+  isFlagged   Boolean  @default(false) // nghi vấn gian lận / chờ duyệt → loại khỏi quỹ tới khi duyệt
+  flagReason  String?
+  mapPolyline String?  // summary_polyline (Google encoded) để vẽ tuyến gọn trên bảng tin
+  amountVnd   Int      @default(0) // quỹ đã quy đổi (0 nếu bị flag)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Hoạt động gửi tay (môn Strava không có: cầu lông, bóng bàn…) — cần Admin duyệt mới quy đổi ra tiền.
+  source       String    @default("strava") // strava | manual
+  kindKey      String?   // với hoạt động gửi tay: key của ActivityKind
+  proofUrl     String?   // ảnh/bằng chứng người gửi tải lên
+  note         String?   // ghi chú người gửi
+  reviewedById String?   // admin đã duyệt/từ chối
+  reviewedAt   DateTime?
+  rejectedAt   DateTime? // set khi bị từ chối (vẫn ghi nhận hoạt động, không quy đổi)
+  rejectReason String?
+
+  reactions   Reaction[]
+  comments    Comment[]
+
+  @@index([startDate])
+  @@index([employeeId])
+  @@index([type])
+  @@index([source, reviewedAt])
+}
+
+/// Bảng tỷ lệ quy đổi (admin chỉnh) — mỗi môn 1 dòng
+model ConversionRule {
+  id           String  @id @default(cuid())
+  activityType String  @unique // khớp Activity.type
+  mode         String // 'km' | 'activity'
+  rateVnd      Int
+  capPerDayVnd Int? // trần quỹ mỗi người mỗi ngày cho môn này (null = không trần)
+  active       Boolean @default(true)
+}
+
+/// Chiến dịch gây quỹ (admin tạo nhiều; một chiến dịch đang chạy = active)
+model Campaign {
+  id          String   @id @default(cuid())
+  name        String
+  description String? // mục đích chiến dịch — hiển thị cho thành viên
+  goalVnd     BigInt
+  startDate   DateTime
+  endDate     DateTime
+  active      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+/// Cài đặt hệ thống dạng key-value (mở rộng dễ khi thêm setting mới)
+/// Ví dụ: key="conversionFromDate" value="2026-03-01"
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+/// Môn/hoạt động do Admin tự cấu hình (Strava không có: cầu lông, bóng bàn, gym tại chỗ…).
+/// Là danh mục cho form "gửi hoạt động tay" và mang luôn tỷ lệ quy đổi của môn đó.
+model ActivityKind {
+  id           String   @id @default(cuid())
+  key          String   @unique // định danh không dấu, vd "badminton", "table-tennis"
+  nameVi       String // tên hiển thị, vd "Cầu lông"
+  icon         String   @default("✨")
+  mode         String   @default("session") // 'km' | 'session' (buổi)
+  rateVnd      Int      @default(0)
+  capPerDayVnd Int? // trần quỹ/người/ngày cho môn này (null = không trần)
+  requireProof Boolean  @default(true) // bắt buộc tải bằng chứng khi gửi
+  active       Boolean  @default(true)
+  sortOrder    Int      @default(100)
+  createdAt    DateTime @default(now())
+}
+
+/// Mục tiêu cá nhân do nhân sự tự đặt (theo bộ môn) + cấu hình nhắc.
+model Goal {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  sport      String   @default("all") // key môn (Run/Ride/…/kindKey) hoặc "all"
+  metric     String // 'km' | 'sessions' | 'minutes' | 'vnd'
+  target     Float
+  period     String   @default("week") // 'week' | 'month' | 'quarter'
+  label      String? // tên gợi nhớ do người dùng đặt (tuỳ chọn)
+  active     Boolean  @default(true)
+
+  // Nhắc nhở (gửi qua Lark). remindEveryDays=0/null => không nhắc.
+  remindEveryDays Int? // nhắc mỗi N ngày
+  remindHour      Int      @default(8) // giờ trong ngày để nhắc (0-23, giờ VN)
+  lastRemindedAt  DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([employeeId])
+}
+
+/// Bình luận trên một hoạt động.
+model Comment {
+  id         String   @id @default(cuid())
+  activityId String
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  body       String
+  createdAt  DateTime @default(now())
+
+  @@index([activityId])
+}
+
+/// Cảm xúc (vỗ tay/like...) cho một hoạt động — kiểu Lark reaction.
+model Reaction {
+  id         String   @id @default(cuid())
+  activityId String
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  emoji      String // 👍 👏 ❤️ 💪 🔥
+  count      Int      @default(1) // số lần bấm (được bấm nhiều lần để tăng count)
+  createdAt  DateTime @default(now())
+
+  @@unique([activityId, employeeId, emoji]) // 1 người, 1 loại emoji: 1 dòng, count = số lần bấm
+  @@index([activityId])
+}
+
+/// WiThanks — 1 lượt gửi khoai cảm ơn (ledger cho cả ví tặng lẫn ví nhận)
+model ThanksGift {
+  id         String   @id @default(cuid())
+  senderId   String
+  sender     Employee @relation("thanksSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId String
+  receiver   Employee @relation("thanksReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  khoai      Int
+  message    String
+  anonymous  Boolean  @default(false) // ẩn danh trên board (người nhận vẫn biết qua Lark)
+  kind       String   @default("thanks") // thanks | super | special
+  valueTags  String[] @default([]) // giá trị cốt lõi được gắn (vd "tan-tam")
+  heartCount Int      @default(0) // số ❤️ (denormalize để xếp "được yêu thích")
+  createdAt  DateTime @default(now())
+  hearts     ThanksHeart[]
+
+  @@index([receiverId, createdAt])
+  @@index([senderId, createdAt])
+}
+
+/// WiThanks — 1 lượt thả ❤️ cho một lời cảm ơn (1 người/1 lời = 1 tim).
+model ThanksHeart {
+  id         String     @id @default(cuid())
+  thanksId   String
+  thanks     ThanksGift @relation(fields: [thanksId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  createdAt  DateTime   @default(now())
+
+  @@unique([thanksId, employeeId])
+  @@index([thanksId])
+}
+
+/// WiThanks — sổ cái ví NHẬN (nguyên tử). Mỗi dòng = 1 thay đổi số dư + số dư sau giao dịch.
+model KhoaiTransaction {
+  id           String   @id @default(cuid())
+  employeeId   String
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  delta        Int // +cộng / -trừ
+  balanceAfter Int // số dư ví NHẬN sau giao dịch
+  reason       String // thanks | super | redeem | special | card | contribution | admin | opening | refund
+  refType      String? // ThanksGift | Redemption | CardDraw | Contribution | Reward
+  refId        String?
+  note         String?
+  createdById  String? // ai gây ra (giver / admin)
+  createdAt    DateTime @default(now())
+
+  @@index([employeeId, createdAt])
+}
+
+/// WiThanks — phần quà đổi bằng khoai. 3 loại:
+///  • individual: đổi ngay bằng khoai cá nhân (costKhoai).
+///  • squad: nhóm cùng góp tới goalKhoai; tối đa maxMain suất "Main Contributor" được hưởng quà.
+///  • greenfield: cả văn phòng cùng góp tới goalKhoai; ai cũng góp nhiều lần, không giữ suất.
+model Reward {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  emoji       String?  // biểu tượng hiển thị khi không có ảnh
+  imageUrl    String?
+  costKhoai   Int      @default(0) // individual: giá đổi
+  kind        String   @default("individual") // individual | squad | greenfield
+  goalKhoai   Int?     // squad/greenfield: mốc khoai cần góp đủ
+  maxMain     Int?     // squad: số suất Main Contributor được hưởng quà
+  status      String   @default("open") // open | fulfilled (đạt mốc & đã trao)
+  active      Boolean  @default(true)
+  sortOrder   Int      @default(100)
+  createdAt   DateTime @default(now())
+  redemptions   Redemption[]
+  contributions Contribution[]
+}
+
+/// WiThanks — 1 người góp khoai cho 1 phần quà squad/greenfield (cộng dồn).
+model Contribution {
+  id         String   @id @default(cuid())
+  rewardId   String
+  reward     Reward   @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  khoai      Int      @default(0) // tổng khoai đã góp cho phần quà này
+  isMain     Boolean  @default(false) // squad: giữ suất Main (được hưởng quà)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([rewardId, employeeId])
+  @@index([rewardId])
+}
+
+/// WiThanks — hàng đợi HR hoàn tất (đổi quà cá nhân, Special Gift, squad/greenfield đủ mốc).
+model Fulfillment {
+  id            String    @id @default(cuid())
+  kind          String // individual | special | squad | greenfield
+  title         String // tóm tắt hiển thị (tên quà / nội dung)
+  employeeId    String // người hưởng / đại diện nhóm
+  employee      Employee  @relation("fulfillBeneficiary", fields: [employeeId], references: [id], onDelete: Cascade)
+  counterpart   String? // với special: tên người tặng (snapshot)
+  khoai         Int       @default(0)
+  refType       String? // Redemption | ThanksGift | Reward
+  refId         String?
+  status        String    @default("pending") // pending | fulfilled | cancelled
+  hrNote        String?
+  fulfilledById String?
+  fulfilledAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([status, createdAt])
+}
+
+/// WiThanks/HR — ghi chú nội bộ về một nhân sự (chỉ admin thấy).
+model EmployeeNote {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation("empNotes", fields: [employeeId], references: [id], onDelete: Cascade)
+  authorId   String?
+  author     Employee? @relation("empNoteAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  body       String
+  createdAt  DateTime @default(now())
+
+  @@index([employeeId, createdAt])
+}
+
+/// WiThanks — 1 lượt đổi quà của nhân sự
+model Redemption {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  rewardId   String
+  reward     Reward   @relation(fields: [rewardId], references: [id])
+  rewardName String // snapshot tên quà lúc đổi
+  costKhoai  Int
+  status     String   @default("pending") // pending | fulfilled
+  createdAt  DateTime @default(now())
+
+  @@index([employeeId])
+}
