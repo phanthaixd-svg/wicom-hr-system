@@ -6,6 +6,7 @@ import Avatar from "../Avatar";
 import GiveThanksModal from "../withanks/GiveThanksModal";
 import SubmitActivity from "../me/SubmitActivity";
 import CardCollectionModal from "./CardCollectionModal";
+import Modal from "@/components/ui/Modal";
 
 interface Ring { pct: number; done: boolean; kmLeft: number; target: number }
 interface Rings { move: Ring; thanks: { done: boolean }; grow: { done: boolean; hidden: boolean } }
@@ -249,9 +250,7 @@ export default function WicerHome() {
       {showColl && <CardCollectionModal onClose={() => setShowColl(false)} />}
 
       {showCard && card?.drawn && (
-        <div className="modal-overlay" onClick={() => setShowCard(false)}>
-          <div className="modal-panel wh-card-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => setShowCard(false)} aria-label="Đóng">✕</button>
+        <Modal onClose={() => setShowCard(false)} panelClassName="wh-card-modal">
             <h3 style={{ margin: "0 0 12px" }}>🎴 Wicer Card hôm nay</h3>
             <div className={`wh-wc-front rarity-${card.rarity}`}>
               {card.rarity !== "common" && <span className="wh-wc-rare">{card.rarity === "legendary" ? "HUYỀN THOẠI 🌟" : "HIẾM ✦"}</span>}
@@ -263,8 +262,7 @@ export default function WicerHome() {
               </div>
             </div>
             <p className="sub" style={{ marginTop: 12, textAlign: "center" }}>Mỗi ngày một lá — quay lại mai để lật lá mới nhé!</p>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

@@ -30,6 +30,7 @@
     "@types/leaflet": "^1.9.14",
     "@types/node": "^22.10.5",
     "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.2.3",
     "prisma": "^6.2.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"

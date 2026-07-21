@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Avatar from "../Avatar";
+import Modal from "@/components/ui/Modal";
+import Button from "@/components/ui/Button";
 
 interface Member { id: string; name: string; avatarUrl: string | null; team: string | null }
 interface Allowance { unlimited: boolean; canGiveNow: number | null; perPersonDay: number | null; weekRemaining: number | null; monthRemaining: number | null }
@@ -14,17 +16,21 @@ const SUPER_KHOAI = 30, SPECIAL_KHOAI = 100, MIN_SUPER = 80, MIN_SPECIAL = 80;
 const NO_ELIG: Eligibility = { canSuper: false, superUsed: 0, canSpecial: false, specialUsed: 0, tenureDays: 0, specialCost: SPECIAL_KHOAI, specialTenureDays: 180 };
 
 export default function GiveThanksModal({
-  allowance, balance = 0, eligibility, valueTags = [], initialTier = "thanks", onClose, onDone,
+  allowance, balance = 0, eligibility, valueTags = [], initialTier = "thanks", initialReceiver, onClose, onDone,
 }: {
   allowance: Allowance; balance?: number; eligibility?: Eligibility; valueTags?: ValueTag[];
-  initialTier?: Tier; onClose: () => void; onDone: () => void;
+  initialTier?: Tier; initialReceiver?: Member | null; onClose: () => void; onDone: () => void;
 }) {
   const showTiers = !!eligibility; // WicerHome quick-give không truyền → chỉ Thanks
   const elig = eligibility ?? NO_ELIG;
   const [tier, setTier] = useState<Tier>(initialTier);
   const [members, setMembers] = useState<Member[]>([]);
   const [q, setQ] = useState("");
-  const [picked, setPicked] = useState<Record<string, Member>>({});
+  const [listOpen, setListOpen] = useState(false);
+  const pickRef = useRef<HTMLDivElement>(null);
+  const [picked, setPicked] = useState<Record<string, Member>>(
+    initialReceiver ? { [initialReceiver.id]: initialReceiver } : {},
+  );
   const [khoai, setKhoai] = useState(3);
   const [message, setMessage] = useState("");
   const [tags, setTags] = useState<string[]>([]);
@@ -37,16 +43,28 @@ export default function GiveThanksModal({
     fetch("/api/withanks/members", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : { members: [] }))
       .then((j) => setMembers(j.members ?? []));
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = ""; };
   }, []);
+
+  // Đóng danh sách tên khi bấm ra ngoài ô chọn.
+  useEffect(() => {
+    if (!listOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (pickRef.current && !pickRef.current.contains(e.target as Node)) setListOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [listOpen]);
 
   const single = tier !== "thanks";
   const cap = allowance.perPersonDay ?? 5;
   const pickedList = Object.values(picked);
+  // Lọc theo tìm kiếm + sắp xếp A→Z theo tên cho dễ tìm.
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return members.filter((m) => !s || m.name.toLowerCase().includes(s) || (m.team ?? "").toLowerCase().includes(s)).slice(0, 40);
+    return members
+      .filter((m) => !s || m.name.toLowerCase().includes(s) || (m.team ?? "").toLowerCase().includes(s))
+      .sort((a, b) => a.name.localeCompare(b.name, "vi"))
+      .slice(0, 60);
   }, [members, q]);
 
   const toggle = (m: Member) =>
@@ -86,18 +104,15 @@ export default function GiveThanksModal({
   const doneSub = tier === "special" ? "HR sẽ liên hệ để chuẩn bị món quà thật. Cảm ơn vì đã trân trọng đồng đội 💛" : "Khoai đã được trao. Người nhận sẽ được Lark báo ngay.";
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-panel gt-panel" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose} aria-label="Đóng">✕</button>
-
+    <Modal onClose={onClose} panelClassName="gt-panel">
         {done ? (
           <div className="submit-done">
             <div className="sd-ico">{tier === "special" ? "🎁" : tier === "super" ? "💜" : "🥔"}</div>
             <h3>{doneText}</h3>
             <p className="sub">{doneSub}</p>
             <div className="submit-done-actions">
-              <button className="btn-save-goal" onClick={() => { setDone(false); setPicked({}); setMessage(""); setKhoai(3); setTags([]); setTier("thanks"); }}>Gửi tiếp</button>
-              <button className="btn-cancel" onClick={onClose}>Đóng</button>
+              <Button variant="primary" onClick={() => { setDone(false); setPicked({}); setMessage(""); setKhoai(3); setTags([]); setTier("thanks"); }}>Gửi tiếp</Button>
+              <Button variant="secondary" onClick={onClose}>Đóng</Button>
             </div>
           </div>
         ) : (
@@ -147,24 +162,43 @@ export default function GiveThanksModal({
             )}
 
             <div className="gt-form" style={{ marginTop: 12 }}>
-              <div className="fld">
-                <span>{single ? "Người muốn tôn vinh" : "Người nhận"} {pickedList.length > 0 && !single && <b>· {pickedList.length} người</b>}</span>
+              <div className="fld gt-picker">
+                <span className="fld-lb">
+                  {single ? "Người muốn tôn vinh" : "Người nhận"}
+                  {pickedList.length > 0 && !single && <b className="fld-aside">{pickedList.length} người</b>}
+                </span>
                 {pickedList.length > 0 && (
                   <div className="gt-chips">
                     {pickedList.map((m) => (<button key={m.id} className="gt-chip" onClick={() => toggle(m)}>{m.name} ✕</button>))}
                   </div>
                 )}
-                <input placeholder="Tìm tên / phòng ban…" value={q} onChange={(e) => setQ(e.target.value)} />
-                <div className="gt-memberlist">
-                  {filtered.map((m) => (
-                    <button key={m.id} className={`gt-member${picked[m.id] ? " on" : ""}`} onClick={() => toggle(m)}>
-                      <Avatar name={m.name} url={m.avatarUrl} size={28} />
-                      <span className="gm-name">{m.name}</span>
-                      <span className="gm-team">{m.team ?? ""}</span>
-                      <span className="gm-check">{picked[m.id] ? "✓" : ""}</span>
-                    </button>
-                  ))}
-                  {filtered.length === 0 && <div className="cm-empty">Không tìm thấy.</div>}
+                <div className="gt-search" ref={pickRef}>
+                  <span className="gt-search-ic" aria-hidden>🔍</span>
+                  <input
+                    className="gt-search-in"
+                    placeholder={single ? "Bấm để chọn, hoặc gõ tên…" : "Bấm để chọn nhiều người, hoặc gõ tên…"}
+                    value={q}
+                    onChange={(e) => { setQ(e.target.value); setListOpen(true); }}
+                    onFocus={() => setListOpen(true)}
+                  />
+                  {listOpen && (
+                    <div className="gt-memberlist">
+                      {filtered.map((m) => (
+                        <button
+                          key={m.id}
+                          className={`gt-member${picked[m.id] ? " on" : ""}`}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => { toggle(m); if (single) setListOpen(false); }}
+                        >
+                          <Avatar name={m.name} url={m.avatarUrl} size={28} />
+                          <span className="gm-name">{m.name}</span>
+                          <span className="gm-team">{m.team ?? ""}</span>
+                          <span className="gm-check">{picked[m.id] ? "✓" : ""}</span>
+                        </button>
+                      ))}
+                      {filtered.length === 0 && <div className="cm-empty">Không tìm thấy “{q}”.</div>}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -213,15 +247,19 @@ export default function GiveThanksModal({
               {err && <div className="submit-err">{err}</div>}
 
               <div className="goal-form-actions">
-                <button className="btn-cancel" onClick={onClose}>Huỷ</button>
-                <button className={`btn-save-goal gt-send-${tier}`} onClick={submit} disabled={busy || pickedList.length === 0 || tierBlocked}>
+                <Button variant="secondary" onClick={onClose}>Huỷ</Button>
+                <Button
+                  variant="primary"
+                  tone={tier === "super" ? "super" : tier === "special" ? "special" : undefined}
+                  onClick={submit}
+                  disabled={busy || pickedList.length === 0 || tierBlocked}
+                >
                   {busy ? "Đang gửi…" : tier === "super" ? "Gửi Super Thanks 💜" : tier === "special" ? "Gửi Special Gift 🎁" : `Tặng ${totalCost} 🥔`}
-                </button>
+                </Button>
               </div>
             </div>
           </>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }

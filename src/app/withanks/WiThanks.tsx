@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Avatar from "../Avatar";
+import Modal from "@/components/ui/Modal";
 import GiveThanksModal from "./GiveThanksModal";
 import RewardsSection from "./RewardsSection";
 
@@ -15,6 +16,7 @@ interface GiveRank { id: string; name: string; avatarUrl: string | null; given: 
 interface Rank { id: string; name: string; avatarUrl: string | null; team: string; total: number; rank: number; isMe: boolean }
 interface Me { id: string; name: string; avatarUrl: string | null; balance: number; allowance: Allowance; eligibility: Eligibility; myRank: { rank: number | null; total: number } }
 interface Data { me: Me; valueTags: ValueTag[]; board: BoardPerson[]; givingBoard: GiveRank[]; feed: FeedItem[]; lovedThanks: FeedItem[]; rankings: Rank[] }
+interface Member { id: string; name: string; avatarUrl: string | null; team: string | null }
 
 const KIND_BADGE: Record<string, string> = { super: "💜", special: "🎁" };
 
@@ -30,17 +32,35 @@ const lastName = (n: string) => n.split(" ").slice(-2).join(" ");
 
 export default function WiThanks() {
   const [d, setD] = useState<Data | null>(null);
-  const [view, setView] = useState<"board" | "list">("board");
+  const [members, setMembers] = useState<Member[]>([]);
+  const [view, setView] = useState<"board" | "kudos">("board");
+  const [refreshing, setRefreshing] = useState(false);
   const [giving, setGiving] = useState(false);
+  const [giveTo, setGiveTo] = useState<Member | null>(null);
   const [person, setPerson] = useState<BoardPerson | null>(null);
+  const [kudo, setKudo] = useState<FeedItem | null>(null);
   const [rankOpen, setRankOpen] = useState(false);
   const [feedOpen, setFeedOpen] = useState(false);
   const [rankTab, setRankTab] = useState<"give" | "loved" | "receive">("give");
   const [feedTab, setFeedTab] = useState<"all" | "super" | "special">("all");
   const [hearts, setHearts] = useState<Record<string, { hearted: boolean; count: number }>>({});
 
-  const load = () => fetch("/api/withanks", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then(setD);
-  useEffect(() => { load(); }, []);
+  const load = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const r = await fetch("/api/withanks", { cache: "no-store" });
+      if (r.ok) setD(await r.json());
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  // Danh sách nhân sự để phủ kín bảng vinh danh bằng avatar mờ (bấm để cảm ơn).
+  useEffect(() => {
+    fetch("/api/withanks/members", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : { members: [] }))
+      .then((j) => setMembers(j.members ?? []));
+  }, []);
 
   const vmap = useMemo(() => Object.fromEntries((d?.valueTags ?? []).map((v) => [v.key, v])), [d]);
   const heartOf = (t: { id: string; hearted: boolean; heartCount: number }) => hearts[t.id] ?? { hearted: t.hearted, count: t.heartCount };
@@ -52,9 +72,18 @@ export default function WiThanks() {
   const me = d?.me;
   const al = me?.allowance;
 
-  const people = d ? d.board.slice(0, 16) : [];
-  const padTo = Math.max(8, Math.ceil(people.length / 4) * 4);
-  const empties = Math.max(0, padTo - people.length);
+  // Bảng vinh danh (view "board"): người đã được cảm ơn + avatar mờ của người chưa,
+  // để bảng luôn "đầy" và ai cũng bấm gửi cảm ơn được.
+  const receivers = d ? d.board.slice(0, 15) : [];
+  const boardIds = useMemo(() => new Set(receivers.map((p) => p.id)), [receivers]);
+  const TARGET_TILES = 25;
+  const fadedMembers = useMemo(
+    () => members.filter((m) => !boardIds.has(m.id) && m.id !== me?.id).slice(0, Math.max(0, TARGET_TILES - receivers.length)),
+    [members, boardIds, me?.id, receivers.length],
+  );
+
+  const openGiveTo = (m: Member) => { setGiveTo(m); setGiving(true); };
+  const openGive = () => { setGiveTo(null); setGiving(true); };
 
   const pctW = al && al.weekLimit ? Math.round(((al.weekRemaining ?? 0) / al.weekLimit) * 100) : 0;
   const pctM = al && al.monthLimit ? Math.round(((al.monthRemaining ?? 0) / al.monthLimit) * 100) : 0;
@@ -75,7 +104,7 @@ export default function WiThanks() {
             <b className="tnum">{me ? me.balance : 0} <span className="wt-pot2">🥔</span></b>
             <span className="wt-bal-sub2">để đổi quà & Special Gift</span>
           </div>
-          <button className="wt-give-btn2" onClick={() => setGiving(true)}><span className="ic">💌</span> Gửi lời cảm ơn</button>
+          <button className="wt-give-btn2" onClick={openGive}><span className="ic">💌</span> Gửi lời cảm ơn</button>
         </div>
         <div className="wt-wallet2">
           <div className="wt-w-top"><span>🥔 Còn tặng được</span><b className="tnum">{al?.unlimited ? "∞" : al?.canGiveNow ?? 0}</b></div>
@@ -90,24 +119,25 @@ export default function WiThanks() {
         </div>
       </div>
 
-      {/* ── Kudos Board + cột phải ── */}
+      {/* ── Bảng vinh danh + cột phải ── */}
       <div className="wt-grid2">
         <div className="wt-kboard">
           <div className="wt-kb-head">
-            <b>🏆 Bảng vinh danh</b>
-            <button className="wt-kb-refresh" onClick={load} title="Tải lời cảm ơn mới nhất">↻ Làm mới</button>
+            <b>🏆 Kudos Board</b>
+            <button className={`wt-kb-refresh${refreshing ? " spinning" : ""}`} onClick={load} disabled={refreshing} title="Tải lời cảm ơn mới nhất">
+              <span className="wt-kb-rico">↻</span> {refreshing ? "Đang tải…" : "Làm mới"}
+            </button>
             <div className="seg wt-kb-seg">
               <button className={view === "board" ? "active" : ""} onClick={() => setView("board")}>◉ Người</button>
-              <button className={view === "list" ? "active" : ""} onClick={() => setView("list")}>☰ List</button>
+              <button className={view === "kudos" ? "active" : ""} onClick={() => setView("kudos")}>💬 Kudos</button>
             </div>
-            <button className="wt-kb-more" onClick={() => { setRankTab("give"); setRankOpen(true); }}>Xem bảng →</button>
           </div>
 
           {!d ? (
             <div className="wt-kb-empty">Đang tải…</div>
           ) : view === "board" ? (
             <div className="wt-kb-people">
-              {people.map((p) => {
+              {receivers.map((p) => {
                 const fresh = Date.now() - new Date(p.lastAt).getTime() < 60 * 60 * 1000;
                 const topKind = p.thanks[0]?.kind;
                 return (
@@ -122,23 +152,30 @@ export default function WiThanks() {
                   </button>
                 );
               })}
-              {Array.from({ length: empties }).map((_, i) => (
-                <button className="wt-kp empty" key={`e${i}`} onClick={() => setGiving(true)}>
-                  <div className="wt-kp-av"><span className="wt-kp-plus">🥔</span></div>
-                  <small>{i === 0 ? "Cảm ơn ai đó?" : "—"}</small>
+              {fadedMembers.map((m) => (
+                <button className="wt-kp faded" key={m.id} onClick={() => openGiveTo(m)} title={`Gửi lời cảm ơn tới ${m.name}`}>
+                  <div className="wt-kp-av">
+                    <Avatar name={m.name} url={m.avatarUrl} size={54} />
+                    <span className="wt-kp-give">💌</span>
+                  </div>
+                  <small>{lastName(m.name)}</small>
                 </button>
               ))}
             </div>
           ) : (
-            <div className="wt-kb-list">
-              {d.feed.slice(0, 10).map((t) => (
-                <div className="wt-kli" key={t.id}>
-                  <Avatar name={t.sender.name} url={t.sender.avatarUrl} size={26} />
-                  <b>{lastName(t.sender.name)}</b><span className="ar">→</span>
-                  <Avatar name={t.receiver.name} url={t.receiver.avatarUrl} size={26} /><span className="rc">{lastName(t.receiver.name)}</span>
-                  <span className="k">{KIND_BADGE[t.kind] ? `${KIND_BADGE[t.kind]} ` : ""}+{t.khoai}🥔 · {relTime(t.createdAt)}</span>
-                </div>
-              ))}
+            <div className="wt-kudos">
+              {d.feed.length ? d.feed.slice(0, 20).map((t) => (
+                <button className={`wt-kudo${t.kind !== "thanks" ? " " + t.kind : ""}`} key={t.id} onClick={() => setKudo(t)} title={`${lastName(t.sender.name)} → ${lastName(t.receiver.name)} · xem đầy đủ`}>
+                  <div className="wt-kudo-top">
+                    <div className="wt-kudo-avs">
+                      <span className="wt-kudo-av s"><Avatar name={t.sender.name} url={t.sender.avatarUrl} size={26} /></span>
+                      <span className="wt-kudo-av r"><Avatar name={t.receiver.name} url={t.receiver.avatarUrl} size={26} /></span>
+                    </div>
+                    <span className="wt-kudo-k tnum">{KIND_BADGE[t.kind] ? `${KIND_BADGE[t.kind]} ` : ""}+{t.khoai}🥔</span>
+                  </div>
+                  <div className="wt-kudo-msg">{t.message}</div>
+                </button>
+              )) : <div className="wt-kb-empty">Chưa có lời cảm ơn nào. Hãy là người mở đầu! 💌</div>}
             </div>
           )}
         </div>
@@ -146,7 +183,9 @@ export default function WiThanks() {
         {/* CỘT PHẢI */}
         <div className="wt-right">
           <div className="card wt-card">
-            <div className="wt-card-h">🌻 Người gieo khoai <span className="q">quý này</span></div>
+            <div className="wt-card-h">🌻 Người gieo khoai <span className="q">quý này</span>
+              <button className="wt-card-more" onClick={() => { setRankTab("give"); setRankOpen(true); }}>Xem bảng →</button>
+            </div>
             {d?.givingBoard.length ? d.givingBoard.slice(0, 5).map((g) => (
               <div className={`wt-rk-row${g.isMe ? " me" : ""}`} key={g.id}>
                 <span className={`rk${g.rank <= 3 ? " top" : ""}`}>{g.rank}</span>
@@ -184,100 +223,113 @@ export default function WiThanks() {
 
       {/* Modal 1 người trên board */}
       {person && (
-        <div className="modal-overlay" onClick={() => setPerson(null)}>
-          <div className="modal-panel wt-person" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => setPerson(null)} aria-label="Đóng">✕</button>
-            <div className="wtp-head">
-              <Avatar name={person.name} url={person.avatarUrl} size={52} />
-              <div>
-                <div className="wtp-name">{person.name}</div>
-                <div className="wtp-sub">{person.team} · {person.quarterCount} lời cảm ơn quý này · {person.totalReceived} 🥔</div>
-              </div>
-            </div>
-            <div className="wtp-thanks">
-              {person.thanks.map((t) => (
-                <div className="wtp-t" key={t.id}>
-                  <div className="wtp-t-head"><b>{KIND_BADGE[t.kind] ? `${KIND_BADGE[t.kind]} ` : ""}{t.senderName}</b> <span className="wtf-k tnum">+{t.khoai}🥔</span> <span className="wtf-time">· {relTime(t.createdAt)}</span>{t.heartCount > 0 && <span className="wtf-heart">❤️ {t.heartCount}</span>}</div>
-                  <div className="wtp-t-msg">{t.message}</div>
-                  <VTags keys={t.valueTags} />
-                </div>
-              ))}
+        <Modal onClose={() => setPerson(null)} panelClassName="wt-person">
+          <div className="wtp-head">
+            <Avatar name={person.name} url={person.avatarUrl} size={52} />
+            <div>
+              <div className="wtp-name">{person.name}</div>
+              <div className="wtp-sub">{person.team} · {person.quarterCount} lời cảm ơn quý này · {person.totalReceived} 🥔</div>
             </div>
           </div>
-        </div>
+          <div className="wtp-thanks">
+            {person.thanks.map((t) => (
+              <div className="wtp-t" key={t.id}>
+                <div className="wtp-t-head"><b>{KIND_BADGE[t.kind] ? `${KIND_BADGE[t.kind]} ` : ""}{t.senderName}</b> <span className="wtf-k tnum">+{t.khoai}🥔</span> <span className="wtf-time">· {relTime(t.createdAt)}</span>{t.heartCount > 0 && <span className="wtf-heart">❤️ {t.heartCount}</span>}</div>
+                <div className="wtp-t-msg">{t.message}</div>
+                <VTags keys={t.valueTags} />
+              </div>
+            ))}
+          </div>
+          <button className="wtp-give" onClick={() => { const p = person; setPerson(null); openGiveTo({ id: p.id, name: p.name, avatarUrl: p.avatarUrl, team: p.team }); }}>💌 Gửi lời cảm ơn tới {lastName(person.name)}</button>
+        </Modal>
+      )}
+
+      {/* Kudos chi tiết */}
+      {kudo && (
+        <Modal onClose={() => setKudo(null)} panelClassName="wt-kudomodal">
+          <div className={`wt-kudomodal-top${kudo.kind !== "thanks" ? " " + kudo.kind : ""}`}>
+            <div className="wt-kudo-avs big">
+              <span className="wt-kudo-av s"><Avatar name={kudo.sender.name} url={kudo.sender.avatarUrl} size={56} /></span>
+              <span className="wt-kudo-av r"><Avatar name={kudo.receiver.name} url={kudo.receiver.avatarUrl} size={56} /></span>
+            </div>
+            <div className="wt-kudomodal-nm"><b>{lastName(kudo.sender.name)}</b> gửi tới <b>{lastName(kudo.receiver.name)}</b></div>
+            <div className="wt-kudomodal-badge">{KIND_BADGE[kudo.kind] ? `${KIND_BADGE[kudo.kind]} ` : ""}+{kudo.khoai} 🥔 · {relTime(kudo.createdAt)}</div>
+          </div>
+          <div className="wt-kudomodal-msg">“{kudo.message}”</div>
+          <div className="wt-kudomodal-foot">
+            <VTags keys={kudo.valueTags} />
+            {(() => { const h = heartOf(kudo); return (
+              <button className={`wt-heart${h.hearted ? " on" : ""}`} onClick={() => toggleHeart(kudo.id)}>{h.hearted ? "❤️" : "🤍"} {h.count > 0 ? h.count : ""}</button>
+            ); })()}
+          </div>
+        </Modal>
       )}
 
       {/* Popup "Xem bảng" — xếp hạng 3 tab */}
       {rankOpen && d && (
-        <div className="modal-overlay" onClick={() => setRankOpen(false)}>
-          <div className="modal-panel wt-rankmodal" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => setRankOpen(false)} aria-label="Đóng">✕</button>
-            <h3>🏆 Xếp hạng WiThanks</h3>
-            <div className="wt-leadtabs">
-              <button className={rankTab === "give" ? "on" : ""} onClick={() => setRankTab("give")}>🌻 Cho đi</button>
-              <button className={rankTab === "loved" ? "on" : ""} onClick={() => setRankTab("loved")}>❤️ Được yêu thích</button>
-              <button className={rankTab === "receive" ? "on" : ""} onClick={() => setRankTab("receive")}>🥔 Nhận</button>
-            </div>
-            <div className="wt-rankbody">
-              {rankTab === "give" && (d.givingBoard.length ? d.givingBoard.map((g) => (
-                <div className={`wt-rankrow${g.isMe ? " me" : ""}`} key={g.id}>
-                  <span className={`rk${g.rank <= 3 ? " top" : ""}`}>{g.rank <= 3 ? ["🥇", "🥈", "🥉"][g.rank - 1] : g.rank}</span>
-                  <Avatar name={g.name} url={g.avatarUrl} size={30} /><span className="nm">{g.isMe ? "Bạn" : g.name}</span>
-                  <span className="val">{g.given} 🥔 cho đi</span>
-                </div>
-              )) : <div className="wt-card-empty">Chưa có dữ liệu quý này.</div>)}
-              {rankTab === "receive" && (d.rankings.length ? d.rankings.map((r) => (
-                <div className={`wt-rankrow${r.isMe ? " me" : ""}`} key={r.id}>
-                  <span className={`rk${r.rank <= 3 ? " top" : ""}`}>{r.rank <= 3 ? ["🥇", "🥈", "🥉"][r.rank - 1] : r.rank}</span>
-                  <Avatar name={r.name} url={r.avatarUrl} size={30} /><span className="nm">{r.isMe ? "Bạn" : r.name} <small>· {r.team}</small></span>
-                  <span className="val">{r.total} 🥔</span>
-                </div>
-              )) : <div className="wt-card-empty">Chưa có dữ liệu.</div>)}
-              {rankTab === "loved" && (d.lovedThanks.length ? d.lovedThanks.map((t) => (
-                <div className="wt-lovedrow" key={t.id}>
-                  <span className="heart">❤️ {t.heartCount}</span>
-                  <div className="bd"><div className="mt"><b>{lastName(t.sender.name)}</b> → <b>{lastName(t.receiver.name)}</b> {KIND_BADGE[t.kind] && <span>{KIND_BADGE[t.kind]}</span>}</div><div className="msg">{t.message}</div></div>
-                </div>
-              )) : <div className="wt-card-empty">Chưa có lời cảm ơn nào được thả tim.</div>)}
-            </div>
-            <div className="wt-ranknote">🌱 Mặc định <b>“Cho đi”</b> để tôn vinh sự cho đi. Khoai Admin không tính. “Được yêu thích” xếp theo số ❤️.</div>
+        <Modal onClose={() => setRankOpen(false)} panelClassName="wt-rankmodal">
+          <h3>🏆 Xếp hạng WiThanks</h3>
+          <div className="wt-leadtabs">
+            <button className={rankTab === "give" ? "on" : ""} onClick={() => setRankTab("give")}>🌻 Cho đi</button>
+            <button className={rankTab === "loved" ? "on" : ""} onClick={() => setRankTab("loved")}>❤️ Được yêu thích</button>
+            <button className={rankTab === "receive" ? "on" : ""} onClick={() => setRankTab("receive")}>🥔 Nhận</button>
           </div>
-        </div>
+          <div className="wt-rankbody">
+            {rankTab === "give" && (d.givingBoard.length ? d.givingBoard.map((g) => (
+              <div className={`wt-rankrow${g.isMe ? " me" : ""}`} key={g.id}>
+                <span className={`rk${g.rank <= 3 ? " top" : ""}`}>{g.rank <= 3 ? ["🥇", "🥈", "🥉"][g.rank - 1] : g.rank}</span>
+                <Avatar name={g.name} url={g.avatarUrl} size={30} /><span className="nm">{g.isMe ? "Bạn" : g.name}</span>
+                <span className="val">{g.given} 🥔 cho đi</span>
+              </div>
+            )) : <div className="wt-card-empty">Chưa có dữ liệu quý này.</div>)}
+            {rankTab === "receive" && (d.rankings.length ? d.rankings.map((r) => (
+              <div className={`wt-rankrow${r.isMe ? " me" : ""}`} key={r.id}>
+                <span className={`rk${r.rank <= 3 ? " top" : ""}`}>{r.rank <= 3 ? ["🥇", "🥈", "🥉"][r.rank - 1] : r.rank}</span>
+                <Avatar name={r.name} url={r.avatarUrl} size={30} /><span className="nm">{r.isMe ? "Bạn" : r.name} <small>· {r.team}</small></span>
+                <span className="val">{r.total} 🥔</span>
+              </div>
+            )) : <div className="wt-card-empty">Chưa có dữ liệu.</div>)}
+            {rankTab === "loved" && (d.lovedThanks.length ? d.lovedThanks.map((t) => (
+              <div className="wt-lovedrow" key={t.id}>
+                <span className="heart">❤️ {t.heartCount}</span>
+                <div className="bd"><div className="mt"><b>{lastName(t.sender.name)}</b> → <b>{lastName(t.receiver.name)}</b> {KIND_BADGE[t.kind] && <span>{KIND_BADGE[t.kind]}</span>}</div><div className="msg">{t.message}</div></div>
+              </div>
+            )) : <div className="wt-card-empty">Chưa có lời cảm ơn nào được thả tim.</div>)}
+          </div>
+          <div className="wt-ranknote">🌱 Mặc định <b>“Cho đi”</b> để tôn vinh sự cho đi. Khoai Admin không tính. “Được yêu thích” xếp theo số ❤️.</div>
+        </Modal>
       )}
 
       {/* Popup "Tất cả lời cảm ơn" */}
       {feedOpen && d && (
-        <div className="modal-overlay" onClick={() => setFeedOpen(false)}>
-          <div className="modal-panel wt-feedmodal" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => setFeedOpen(false)} aria-label="Đóng">✕</button>
-            <h3>💬 Tất cả lời cảm ơn</h3>
-            <div className="wt-leadtabs">
-              <button className={feedTab === "all" ? "on" : ""} onClick={() => setFeedTab("all")}>Tất cả</button>
-              <button className={feedTab === "super" ? "on" : ""} onClick={() => setFeedTab("super")}>💜 Super</button>
-              <button className={feedTab === "special" ? "on" : ""} onClick={() => setFeedTab("special")}>🎁 Special</button>
-            </div>
-            <div className="wt-feedbody">
-              {feedForTab.length ? feedForTab.map((t) => {
-                const h = heartOf(t);
-                return (
-                  <div className={`wt-fcard${t.kind !== "thanks" ? " " + t.kind : ""}`} key={t.id}>
-                    <div className="hd">
-                      {KIND_BADGE[t.kind] && <span className={`kbadge ${t.kind}`}>{t.kind === "super" ? "SUPER 💜" : "SPECIAL 🎁"}</span>}
-                      <Avatar name={t.sender.name} url={t.sender.avatarUrl} size={24} /><b>{lastName(t.sender.name)}</b>→<Avatar name={t.receiver.name} url={t.receiver.avatarUrl} size={24} /><b>{lastName(t.receiver.name)}</b>
-                      <span className="k tnum">{t.khoai}🥔</span>
-                    </div>
-                    <div className="msg">{t.message}</div>
-                    <div className="wt-fd-foot">
-                      <VTags keys={t.valueTags} />
-                      <span className="tm">{relTime(t.createdAt)}</span>
-                      <button className={`wt-heart${h.hearted ? " on" : ""}`} onClick={() => toggleHeart(t.id)}>{h.hearted ? "❤️" : "🤍"} {h.count > 0 ? h.count : ""}</button>
-                    </div>
-                  </div>
-                );
-              }) : <div className="wt-card-empty">Chưa có lời cảm ơn nào.</div>}
-            </div>
+        <Modal onClose={() => setFeedOpen(false)} panelClassName="wt-feedmodal">
+          <h3>💬 Tất cả lời cảm ơn</h3>
+          <div className="wt-leadtabs">
+            <button className={feedTab === "all" ? "on" : ""} onClick={() => setFeedTab("all")}>Tất cả</button>
+            <button className={feedTab === "super" ? "on" : ""} onClick={() => setFeedTab("super")}>💜 Super</button>
+            <button className={feedTab === "special" ? "on" : ""} onClick={() => setFeedTab("special")}>🎁 Special</button>
           </div>
-        </div>
+          <div className="wt-feedbody">
+            {feedForTab.length ? feedForTab.map((t) => {
+              const h = heartOf(t);
+              return (
+                <div className={`wt-fcard${t.kind !== "thanks" ? " " + t.kind : ""}`} key={t.id}>
+                  <div className="hd">
+                    {KIND_BADGE[t.kind] && <span className={`kbadge ${t.kind}`}>{t.kind === "super" ? "SUPER 💜" : "SPECIAL 🎁"}</span>}
+                    <Avatar name={t.sender.name} url={t.sender.avatarUrl} size={24} /><b>{lastName(t.sender.name)}</b>→<Avatar name={t.receiver.name} url={t.receiver.avatarUrl} size={24} /><b>{lastName(t.receiver.name)}</b>
+                    <span className="k tnum">{t.khoai}🥔</span>
+                  </div>
+                  <div className="msg">{t.message}</div>
+                  <div className="wt-fd-foot">
+                    <VTags keys={t.valueTags} />
+                    <span className="tm">{relTime(t.createdAt)}</span>
+                    <button className={`wt-heart${h.hearted ? " on" : ""}`} onClick={() => toggleHeart(t.id)}>{h.hearted ? "❤️" : "🤍"} {h.count > 0 ? h.count : ""}</button>
+                  </div>
+                </div>
+              );
+            }) : <div className="wt-card-empty">Chưa có lời cảm ơn nào.</div>}
+          </div>
+        </Modal>
       )}
 
       {giving && d && al && (
@@ -286,7 +338,8 @@ export default function WiThanks() {
           balance={me!.balance}
           eligibility={me!.eligibility}
           valueTags={d.valueTags}
-          onClose={() => setGiving(false)}
+          initialReceiver={giveTo}
+          onClose={() => { setGiving(false); setGiveTo(null); }}
           onDone={load}
         />
       )}

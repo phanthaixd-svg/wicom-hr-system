@@ -8,11 +8,13 @@ import MyPage from "./me/MyPage";
 import WiThanks from "./withanks/WiThanks";
 import WicerHome from "./home/WicerHome";
 import HRSetting from "./admin/HRSetting";
+import ActivityView from "./activity/[id]/ActivityView";
 
 // Hub "Wicer Board" — 4 tab hằng ngày (1 chạm).
 type Tab = "home" | "move" | "withanks" | "wigrow";
-// Khu chuyên biệt ở sidebar (records/learn/ai/hrsetting) + "me" = Trang của tôi (mở từ menu avatar). null = đang ở Wicer Board (hub).
-type Area = "records" | "learn" | "ai" | "me" | "hrsetting";
+// Khu chuyên biệt ở sidebar (records/learn/ai/hrsetting) + "me" = Trang của tôi (mở từ menu avatar)
+// + "activity" = xem chi tiết 1 hoạt động (mở từ link Lark). null = đang ở Wicer Board (hub).
+type Area = "records" | "learn" | "ai" | "me" | "hrsetting" | "activity";
 
 const TABS: { key: Tab; icon: string; label: string }[] = [
   { key: "home", icon: "🧭", label: "Wicer Home" },
@@ -48,6 +50,7 @@ export default function AppShell({
   isHR = false,
   initialTab = "home",
   initialArea = null,
+  initialActivityId = null,
 }: {
   meName: string;
   avatarUrl: string | null;
@@ -55,9 +58,10 @@ export default function AppShell({
   isHR?: boolean;
   initialTab?: Tab;
   initialArea?: Area | null;
+  initialActivityId?: string | null;
 }) {
   const [tab, setTab] = useState<Tab>(initialTab);
-  const [area, setArea] = useState<Area | null>(initialArea);
+  const [area, setArea] = useState<Area | null>(initialActivityId ? "activity" : initialArea);
   const [navOpen, setNavOpen] = useState(false);
 
   const inHub = area === null;
@@ -190,12 +194,21 @@ export default function AppShell({
           <div className="wb-panel"><MyPage /></div>
         ) : area === "hrsetting" ? (
           <div className="wb-panel">{canHRSetting ? <HRSetting isAdmin={isAdmin} /> : null}</div>
+        ) : area === "activity" ? (
+          <div className="wb-panel">
+            <div className="wrap">
+              <div className="toolbar" style={{ marginBottom: 4 }}>
+                <a className="conn" onClick={() => gotoHub("move")} role="button" tabIndex={0}>← Về Bảng tin</a>
+              </div>
+              <ActivityView id={initialActivityId ?? ""} idPrefix="page" />
+            </div>
+          </div>
         ) : (
           <div className="wb-ph">
             <div className="wbph-card">
-              <div className="wbph-ic">{AREA_INFO[area].icon}</div>
-              <h2>{AREA_INFO[area].title}</h2>
-              <p className="lead">{AREA_INFO[area].desc}</p>
+              <div className="wbph-ic">{AREA_INFO[area as "records" | "learn" | "ai"].icon}</div>
+              <h2>{AREA_INFO[area as "records" | "learn" | "ai"].title}</h2>
+              <p className="lead">{AREA_INFO[area as "records" | "learn" | "ai"].desc}</p>
               <button className="btn-cancel" style={{ marginTop: 18 }} onClick={() => gotoHub()}>← Về Wicer Board</button>
             </div>
           </div>

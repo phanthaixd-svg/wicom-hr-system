@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Avatar from "../Avatar";
+import Modal from "@/components/ui/Modal";
 
 interface Contributor { id: string; name: string; avatarUrl: string | null; khoai: number; isMain: boolean }
 interface Reward {
@@ -133,9 +134,7 @@ export default function RewardsSection({ onChange }: { onChange?: () => void }) 
 
       {/* Popup chi tiết Squad / Green Field */}
       {detail && (
-        <div className="modal-overlay" onClick={() => setDetail(null)}>
-          <div className="modal-panel rw-detail" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => setDetail(null)} aria-label="Đóng">✕</button>
+        <Modal onClose={() => setDetail(null)} panelClassName="rw-detail">
             <div className={`rwd-hero ${detail.kind === "squad" ? "sq" : "gf"}`}>
               <span className="rwd-tag">{detail.kind === "squad" ? `Amazing Squad · ${detail.maxMain} suất Main` : "Green Field"}</span>
               <span className="rwd-em">{detail.emoji || "🎁"}</span>
@@ -191,8 +190,7 @@ export default function RewardsSection({ onChange }: { onChange?: () => void }) 
                 </div>
               )}
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Modal from "@/components/ui/Modal";
 
 interface Card {
   cardId: string; emoji: string; message: string; category: string; background: string | null; rarity: string; rewardKhoai: number;
@@ -34,11 +35,7 @@ export default function CardCollectionModal({ onClose }: { onClose: () => void }
   const load = () => fetch("/api/wicer-home/collection", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then(setData);
   useEffect(() => {
     load();
-    document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    document.addEventListener("keydown", onKey);
-    return () => { document.body.style.overflow = ""; document.removeEventListener("keydown", onKey); };
-  }, [onClose]);
+  }, []);
 
   const act = (cardId: string, action: "fav" | "remove" | "restore") =>
     fetch("/api/wicer-home/collection", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cardId, action }) })
@@ -61,10 +58,7 @@ export default function CardCollectionModal({ onClose }: { onClose: () => void }
   const byRarity = (r: string) => cards.filter((c) => c.rarity === r);
 
   return (
-    <div className="modal-overlay cc-overlay" onClick={onClose}>
-      <div className="modal-panel cc-modal" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose} aria-label="Đóng">✕</button>
-
+    <Modal onClose={onClose} panelClassName="cc-modal" className="cc-overlay">
         {/* Hero */}
         <div className="cc-hero">
           <div className="cc-hero-glow" />
@@ -123,8 +117,7 @@ export default function CardCollectionModal({ onClose }: { onClose: () => void }
             )}
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }
 

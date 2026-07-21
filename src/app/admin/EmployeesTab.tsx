@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Avatar from "../Avatar";
+import Modal from "@/components/ui/Modal";
+import Button from "@/components/ui/Button";
 
 interface Emp {
   id: string; name: string; email: string | null; avatarUrl: string | null;
@@ -103,7 +105,7 @@ export default function EmployeesTab({ canGrantRoles }: { canGrantRoles: boolean
                   <td style={{ textAlign: "center" }} className="tnum">{e.joinedAt ?? "—"}</td>
                   <td style={{ textAlign: "center" }} className="tnum">{e.leftAt ?? <span style={{ color: "var(--good)" }}>đang làm</span>}</td>
                   <td style={{ textAlign: "center" }}>
-                    <button className="btn-cancel" style={{ padding: "5px 12px" }} onClick={() => setEdit({ ...e })}>Sửa</button>
+                    <Button variant="secondary" size="sm" onClick={() => setEdit({ ...e })}>Sửa</Button>
                   </td>
                 </tr>
               ))}
@@ -115,9 +117,7 @@ export default function EmployeesTab({ canGrantRoles }: { canGrantRoles: boolean
       </div>
 
       {edit && (
-        <div className="modal-overlay" onClick={() => setEdit(null)}>
-          <div className="modal-panel emp-edit" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => setEdit(null)} aria-label="Đóng">✕</button>
+        <Modal onClose={() => setEdit(null)} panelClassName="emp-edit">
             <h3 style={{ margin: "0 0 14px" }}>Hồ sơ nhân sự</h3>
 
             <div className="emp-form">
@@ -171,12 +171,11 @@ export default function EmployeesTab({ canGrantRoles }: { canGrantRoles: boolean
               </div>
 
               <div className="goal-form-actions">
-                <button className="btn-cancel" onClick={() => setEdit(null)}>Huỷ</button>
-                <button className="btn-save-goal" onClick={save} disabled={saving}>{saving ? "Đang lưu…" : "💾 Lưu hồ sơ"}</button>
+                <Button variant="secondary" onClick={() => setEdit(null)}>Huỷ</Button>
+                <Button variant="primary" onClick={save} disabled={saving}>{saving ? "Đang lưu…" : "💾 Lưu hồ sơ"}</Button>
               </div>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </>
   );

@@ -13,7 +13,8 @@ export default async function DashboardPage() {
     where: { id: session.employeeId },
     include: { stravaAccount: true },
   });
-  if (!emp?.stravaAccount || emp.stravaAccount.revokedAt) redirect("/connect");
+  if (!emp) redirect("/");
+  // Strava là tuỳ chọn: user có thể bỏ qua ở bước /connect và kết nối sau trong "Trang của tôi".
 
   return <AppShell meName={session.name} avatarUrl={emp.avatarUrl} isAdmin={emp.isAdmin} isHR={emp.isHR} initialTab="move" />;
 }

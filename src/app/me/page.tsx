@@ -13,7 +13,8 @@ export default async function Page() {
     where: { id: session.employeeId },
     include: { stravaAccount: true },
   });
-  if (!emp?.stravaAccount || emp.stravaAccount.revokedAt) redirect("/connect");
+  if (!emp) redirect("/");
+  // Strava là tuỳ chọn — không ép kết nối; user tự kết nối trong ConnectApps của MyPage.
 
   // "Trang của tôi" (menu avatar) mở thẳng trang hồ sơ cá nhân (MyPage).
   return <AppShell meName={session.name} avatarUrl={emp.avatarUrl} isAdmin={emp.isAdmin} isHR={emp.isHR} initialArea="me" />;

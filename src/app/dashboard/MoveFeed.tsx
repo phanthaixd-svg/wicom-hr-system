@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Avatar from "../Avatar";
 import ActivityModal from "../me/ActivityModal";
+import SubmitActivity from "../me/SubmitActivity";
 import Reactions from "./Reactions";
 import Comments from "../activity/[id]/Comments";
 import type { ReactionGroup } from "@/lib/reactions";
@@ -64,9 +65,10 @@ export default function MoveFeed({ onOpenProfile }: { onOpenProfile: (id: string
   const [openId, setOpenId] = useState<string | null>(null);
   const [cmtOpen, setCmtOpen] = useState<Record<string, boolean>>({});
 
-  useEffect(() => {
+  const load = useCallback(() => {
     fetch("/api/pulse", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then(setD);
   }, []);
+  useEffect(() => { load(); }, [load]);
 
   const toggleCmt = (id: string) => setCmtOpen((s) => ({ ...s, [id]: !s[id] }));
 
@@ -204,6 +206,12 @@ export default function MoveFeed({ onOpenProfile }: { onOpenProfile: (id: string
             </div>
           )}
         </div>
+
+        {/* Thêm hoạt động ngay trong Bảng tin (kết quả cập nhật vào feed + widget) */}
+        <div className="m4m-add">
+          <SubmitActivity onDone={load} />
+        </div>
+        <p className="m4m-add-hint">Có buổi tập chưa lên Strava? Gửi tay để được ghi nhận vào quỹ.</p>
       </aside>
 
       {openId && <ActivityModal id={openId} onClose={() => setOpenId(null)} />}

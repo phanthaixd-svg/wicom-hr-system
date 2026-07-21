@@ -58,7 +58,12 @@ export default async function ConnectPage({
         <a className="btn btn-strava" href="/api/strava/connect">
           ⛰️ Cấp quyền với Strava
         </a>
-        <div className="demo-note">Bạn có thể ngắt kết nối bất cứ lúc nào trong phần Cài đặt.</div>
+        <a className="btn-skip" href="/dashboard">
+          Để sau, vào khám phá trước →
+        </a>
+        <div className="demo-note">
+          Bạn có thể kết nối Strava bất cứ lúc nào trong <b>Trang của tôi → Ứng dụng đã kết nối</b>. Chưa kết nối vẫn dùng được WiThanks &amp; Wicer Card.
+        </div>
       </div>
     </div>
   );

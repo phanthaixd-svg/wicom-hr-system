@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Modal from "@/components/ui/Modal";
 
 interface Kind { key: string; nameVi: string; icon: string; mode: string; rateVnd: number; requireProof: boolean }
 
@@ -34,13 +35,6 @@ export default function SubmitActivity({ onDone }: { onDone: () => void }) {
         setKinds(j.kinds ?? []);
         if (j.kinds?.[0]) setKindKey((prev) => prev || j.kinds[0].key);
       });
-  }, [open]);
-
-  useEffect(() => {
-    if (open) document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = "";
-    };
   }, [open]);
 
   const kind = kinds.find((k) => k.key === kindKey);
@@ -97,10 +91,7 @@ export default function SubmitActivity({ onDone }: { onDone: () => void }) {
     <>
       <button className="submit-act-btn" onClick={() => setOpen(true)}>+ Gửi hoạt động tay</button>
       {open && (
-        <div className="modal-overlay" onClick={() => setOpen(false)}>
-          <div className="modal-panel submit-panel" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => setOpen(false)} aria-label="Đóng">✕</button>
-
+        <Modal onClose={() => setOpen(false)} panelClassName="submit-panel">
             {done ? (
               <div className="submit-done">
                 <div className="sd-ico">✅</div>
@@ -195,8 +186,7 @@ export default function SubmitActivity({ onDone }: { onDone: () => void }) {
                 )}
               </>
             )}
-          </div>
-        </div>
+        </Modal>
       )}
     </>
   );

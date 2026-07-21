@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Avatar from "../Avatar";
+import Modal from "@/components/ui/Modal";
 import ActivityModal from "../me/ActivityModal";
 
 interface Act { id: string; icon: string; name: string; km: number; timeS: number; date: string; amountVnd: number; pending: boolean; }
@@ -33,13 +34,6 @@ export default function ProfileModal({ id, onClose }: { id: string; onClose: () 
   const [actId, setActId] = useState<string | null>(null);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !actId) onClose(); };
-    document.addEventListener("keydown", onKey);
-    document.body.style.overflow = "hidden";
-    return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = ""; };
-  }, [onClose, actId]);
-
-  useEffect(() => {
     setP(null);
     setErr(false);
     fetch(`/api/employee/${id}`, { cache: "no-store" })
@@ -49,10 +43,8 @@ export default function ProfileModal({ id, onClose }: { id: string; onClose: () 
   }, [id]);
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-panel profile-panel" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose} aria-label="Đóng">✕</button>
-
+    <Modal onClose={onClose} panelClassName="profile-panel">
+      <>
         {err ? (
           <p className="lead">Không tải được hồ sơ.</p>
         ) : !p ? (
@@ -61,8 +53,8 @@ export default function ProfileModal({ id, onClose }: { id: string; onClose: () 
           <>
             <div className="pf-head">
               <Avatar name={p.name} url={p.avatarUrl} size={64} className="pf-av" />
-              <div>
-                <b className="pf-name">{p.name}{p.isMe && <span className="youtag">YOU</span>}</b>
+              <div className="pf-head-meta">
+                <b className="pf-name"><span className="pf-name-txt">{p.name}</span>{p.isMe && <span className="youtag">YOU</span>}</b>
                 <div className="pf-dp">{p.team} · Wicom{p.since ? ` · từ ${new Date(p.since).toLocaleDateString("vi-VN", { month: "2-digit", year: "numeric" })}` : ""}</div>
               </div>
             </div>
@@ -93,9 +85,8 @@ export default function ProfileModal({ id, onClose }: { id: string; onClose: () 
             </div>
           </>
         )}
-      </div>
-
-      {actId && <ActivityModal id={actId} onClose={() => setActId(null)} />}
-    </div>
+        {actId && <ActivityModal id={actId} onClose={() => setActId(null)} />}
+      </>
+    </Modal>
   );
 }

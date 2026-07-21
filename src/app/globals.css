@@ -44,6 +44,8 @@ button{font-family:inherit;cursor:pointer}
 .perm h4{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);margin-bottom:6px}
 .perm li{list-style:none;font-size:12.5px;color:var(--ink-2);padding:5px 0;display:grid;grid-template-columns:18px 1fr;gap:8px}
 .perm li::before{content:"✓";color:var(--good);font-weight:800}
+.btn-skip{display:block;margin:10px auto 0;font-size:13px;font-weight:600;color:var(--ink-2);text-decoration:none;padding:9px 12px;border-radius:10px;transition:color .15s,background .15s}
+.btn-skip:hover{color:var(--navy);background:var(--surface-2)}
 .demo-note{font-size:11px;color:var(--ink-3);margin-top:18px}
 .err{font-size:12.5px;color:var(--crit);background:color-mix(in srgb,var(--crit) 10%,transparent);border:1px solid color-mix(in srgb,var(--crit) 30%,transparent);border-radius:10px;padding:10px 12px;margin-bottom:16px}
 .avatar-demo{width:56px;height:56px;border-radius:50%;margin:0 auto 12px;display:grid;place-items:center;color:#fff;font-weight:700;font-size:20px;background:linear-gradient(135deg,var(--strava),#ff7a3c)}
@@ -503,8 +505,10 @@ a.act:hover .at{color:var(--blue)}
 .profile-panel{max-width:440px;padding:24px 24px 26px}
 .profile-panel .lead{color:var(--ink-2);font-size:14px;text-align:center;padding:24px 0}
 .pf-head{display:flex;align-items:center;gap:14px}
-.pf-name{font-size:18px;font-weight:800;display:flex;align-items:center;gap:8px}
-.pf-dp{font-size:12.5px;color:var(--ink-2);margin-top:2px}
+.pf-head-meta{min-width:0;flex:1}
+.pf-name{font-size:18px;font-weight:800;display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;min-width:0}
+.pf-name-txt{overflow-wrap:anywhere}
+.pf-dp{font-size:12.5px;color:var(--ink-2);margin-top:2px;overflow-wrap:anywhere}
 .pf-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:18px}
 .pf-stats > div{background:var(--surface-2);border-radius:11px;padding:10px 6px;text-align:center}
 .pf-stats b{display:block;font-size:16px;font-weight:750;font-variant-numeric:tabular-nums}
@@ -680,6 +684,25 @@ a.act:hover .at{color:var(--blue)}
 .btn-cancel{border:1px solid var(--line);background:transparent;color:var(--ink-2);font-family:inherit;font-size:13.5px;font-weight:600;padding:9px 16px;border-radius:10px;cursor:pointer}
 .btn-save-goal{border:none;background:var(--navy);color:#fff;font-family:inherit;font-size:13.5px;font-weight:700;padding:9px 18px;border-radius:10px;cursor:pointer}
 .btn-save-goal:disabled{opacity:.5;cursor:default}
+
+/* ── Shared UI primitives (Button / Field label) ── */
+.ui-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;line-height:1;font-family:inherit;font-size:13.5px;font-weight:700;padding:9px 18px;border-radius:10px;border:1px solid transparent;cursor:pointer;transition:filter .15s,background .15s,border-color .15s,color .15s}
+.ui-btn:disabled{opacity:.5;cursor:default}
+.ui-btn-sm{padding:6px 12px;font-size:12.5px;border-radius:9px;gap:5px}
+.ui-btn-primary{background:var(--navy);color:#fff}
+.ui-btn-primary:hover:not(:disabled){filter:brightness(1.08)}
+.ui-btn-primary.ui-btn-super{background:var(--sup)}
+.ui-btn-primary.ui-btn-special{background:var(--spc)}
+.ui-btn-secondary{background:transparent;color:var(--ink-2);border-color:var(--line);font-weight:600}
+.ui-btn-secondary:hover:not(:disabled){border-color:var(--blue);color:var(--blue)}
+.ui-btn-ghost{background:transparent;color:var(--ink-2);font-weight:600}
+.ui-btn-ghost:hover:not(:disabled){background:var(--surface-2);color:var(--navy)}
+.ui-btn-danger{background:var(--crit);color:#fff}
+.ui-btn-danger:hover:not(:disabled){filter:brightness(1.06)}
+.fld-lb{display:flex;align-items:center;gap:6px;font-weight:600;color:var(--ink-2)}
+.fld-hint{font-weight:400;color:var(--ink-3);font-size:11.5px}
+.fld-aside{margin-left:auto;font-weight:600}
+
 .goals-list{display:flex;flex-direction:column;gap:12px;margin-top:14px}
 .goal-item{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--surface)}
 .goal-item.done{border-color:color-mix(in srgb,#18E4A2 45%,var(--line));background:color-mix(in srgb,#18E4A2 7%,var(--surface))}
@@ -1002,7 +1025,10 @@ a.act:hover .at{color:var(--blue)}
 .wt-kb-seg{margin-left:auto;background:rgba(255,255,255,.1);border-radius:9px;padding:2px;display:inline-flex}
 .wt-kb-seg button{border:none;background:none;font-family:inherit;font-size:11px;font-weight:700;padding:5px 9px;border-radius:7px;color:#bcd3e2;cursor:pointer}
 .wt-kb-seg button.active{background:#FFC45F;color:#4a3200}
-.wt-kb-people{flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:16px 8px;align-content:space-between}
+.wt-kb-people{flex:1;min-height:0;display:grid;grid-template-columns:repeat(5,1fr);gap:16px 8px;align-content:start;overflow-y:auto;padding-right:2px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.22) transparent}
+.wt-kb-people::-webkit-scrollbar{width:5px}
+.wt-kb-people::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:3px}
+@media(max-width:560px){.wt-kb-people{grid-template-columns:repeat(4,1fr)}}
 .wt-kp{border:none;background:none;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:6px;transition:transform .14s}
 .wt-kp:hover{transform:translateY(-3px)}
 .wt-kp-av{position:relative;width:54px;height:54px}
@@ -1021,6 +1047,43 @@ a.act:hover .at{color:var(--blue)}
 .wt-kli .rc{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .wt-kli .k{margin-left:auto;color:#FFC45F;font-weight:850;white-space:nowrap}
 .wt-kb-empty{color:#9FC6DE;font-size:13px;padding:20px 0;text-align:center}
+/* Avatar mờ (người chưa được cảm ơn) — phủ kín bảng, bấm để gửi cảm ơn */
+.wt-kp.faded{opacity:.4;filter:grayscale(.35)}
+.wt-kp.faded:hover{opacity:1;filter:none;transform:translateY(-3px)}
+.wt-kp.faded small{color:rgba(255,255,255,.55)}
+.wt-kp-give{position:absolute;right:-4px;bottom:-3px;font-size:15px;opacity:0;transition:opacity .14s;filter:drop-shadow(0 1px 2px rgba(0,0,0,.4))}
+.wt-kp.faded:hover .wt-kp-give{opacity:1}
+/* Kudos nổi trên nền Kudos Board — 4 thẻ/hàng, tối đa 5 hàng, nền glass */
+.wt-kudos{flex:1;min-height:0;display:grid;grid-template-columns:repeat(4,1fr);gap:8px;align-content:start;overflow-y:auto;padding:2px 4px 2px 2px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.22) transparent}
+.wt-kudos::-webkit-scrollbar{width:5px}
+.wt-kudos::-webkit-scrollbar-track{background:transparent}
+.wt-kudos::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:3px}
+.wt-kudo{position:relative;text-align:left;border:1px solid rgba(255,255,255,.15);cursor:pointer;font-family:inherit;background:rgba(255,255,255,.10);border-radius:12px;padding:8px 9px;display:flex;flex-direction:column;gap:5px;transition:transform .14s,background .14s}
+.wt-kudo:hover{transform:translateY(-2px);background:rgba(255,255,255,.19)}
+.wt-kudo.super{border-color:rgba(163,142,255,.55)}
+.wt-kudo.special{border-color:rgba(240,170,90,.55)}
+.wt-kudo-top{display:flex;align-items:center;justify-content:space-between;gap:4px}
+.wt-kudo-avs{display:flex;align-items:center}
+.wt-kudo-av{border-radius:50%;border:2px solid rgba(255,255,255,.85);background:#123A58;display:inline-flex;line-height:0}
+.wt-kudo-av.r{margin-left:-11px}
+.wt-kudo-k{font-size:11px;font-weight:850;color:#FFC45F;white-space:nowrap;flex:none}
+.wt-kudo-msg{color:#e7f1f8;font-size:11px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.5em}
+@media(max-width:560px){.wt-kudos{grid-template-columns:repeat(2,1fr)}}
+/* Kudos chi tiết (modal) */
+.wt-kudomodal{max-width:440px;padding:0 24px 24px;text-align:center;overflow:hidden}
+.wt-kudomodal-top{margin:0 -24px 16px;padding:26px 24px 18px;background:linear-gradient(160deg,#215579,#0A2338);color:#EAF4FB}
+.wt-kudomodal-top.super{background:linear-gradient(160deg,#6d54c8,#2e2258)}
+.wt-kudomodal-top.special{background:linear-gradient(160deg,#d0842c,#5a3814)}
+.wt-kudomodal .wt-kudo-avs.big{justify-content:center;margin-bottom:12px}
+.wt-kudomodal .wt-kudo-av{border-width:3px}
+.wt-kudomodal .wt-kudo-av.r{margin-left:-16px}
+.wt-kudomodal-nm{font-size:15px;font-weight:600}
+.wt-kudomodal-nm b{font-weight:800}
+.wt-kudomodal-badge{font-size:12px;margin-top:5px;opacity:.85}
+.wt-kudomodal-msg{font-size:15.5px;line-height:1.6;color:var(--ink);font-weight:500;padding:6px 4px 4px}
+.wt-kudomodal-foot{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:14px}
+.wtp-give{margin-top:14px;width:100%;border:none;background:var(--navy);color:#fff;font-family:inherit;font-weight:700;font-size:13.5px;padding:11px;border-radius:11px;cursor:pointer}
+.wtp-give:hover{filter:brightness(1.08)}
 
 .wt-card{padding:14px}
 .wt-card-h{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;margin-bottom:10px}
@@ -1152,14 +1215,21 @@ a.act:hover .at{color:var(--blue)}
 .gt-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
 .gt-chip{border:1px solid color-mix(in srgb,var(--blue) 40%,var(--line));background:color-mix(in srgb,var(--blue) 12%,transparent);color:var(--navy);font-family:inherit;font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;cursor:pointer}
 :root[data-theme="dark"] .gt-chip{color:var(--blue)}
-.gt-memberlist{max-height:200px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;margin-top:6px;background:var(--surface)}
-.gt-member{display:flex;align-items:center;gap:10px;width:100%;border:none;background:transparent;padding:8px 11px;cursor:pointer;font-family:inherit;border-bottom:1px solid var(--line);text-align:left}
+/* Ô chọn người: ẩn list, chỉ hiện dropdown nổi khi focus ô tìm kiếm */
+.gt-picker{position:relative}
+.gt-search{position:relative}
+.gt-search-ic{position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:13px;opacity:.7;pointer-events:none}
+.gt-search-in{width:100%;padding-left:32px !important}
+.gt-memberlist{margin-top:6px;max-height:210px;overflow-y:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface);box-shadow:0 8px 22px rgba(10,25,40,.14);overscroll-behavior:contain}
+.gt-member{display:flex;align-items:center;gap:10px;width:100%;border:none;background:transparent;padding:9px 12px;cursor:pointer;font-family:inherit;border-bottom:1px solid var(--line);text-align:left}
 .gt-member:last-child{border-bottom:none}
 .gt-member:hover{background:var(--surface-2)}
-.gt-member.on{background:color-mix(in srgb,var(--blue) 10%,transparent)}
+.gt-member.on{background:color-mix(in srgb,var(--blue) 12%,transparent)}
 .gm-name{flex:1;font-size:13.5px;font-weight:600;color:var(--ink);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gm-team{font-size:11px;color:var(--ink-3);flex:none}
-.gm-check{width:16px;color:var(--blue);font-weight:800;flex:none}
+.gm-team{font-size:11px;color:var(--ink-3);flex:none;max-width:40%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gm-check{width:18px;height:18px;flex:none;display:grid;place-items:center;border-radius:50%;font-size:11px;font-weight:800;color:#fff;background:transparent}
+.gt-member.on .gm-check{background:var(--blue)}
+.gt-memberlist .cm-empty{padding:12px;text-align:center;color:var(--ink-3);font-size:12.5px}
 .gt-total{font-size:20px;font-weight:800;color:#c8890b;padding:7px 0}
 
 /* ===================== WICER HOME (Passport + Home) ===================== */
@@ -1489,6 +1559,9 @@ button.wh-rit:hover{border-color:var(--blue)}
 
 /* Của tôi — thẻ profile kiểu Strava */
 .m4-mine{text-align:center;position:relative;overflow:visible;margin-top:28px;padding:52px 16px 16px}
+.m4m-add{display:flex}
+.m4m-add .submit-act-btn{flex:1;width:100%;font-size:14px;padding:12px 16px;background:var(--navy)}
+.m4m-add-hint{font-size:11.5px;color:var(--ink-3);text-align:center;margin:-4px 4px 0;line-height:1.4}
 .m4m-av{position:absolute;top:-24px;left:50%;transform:translateX(-50%);width:68px;height:68px;border-radius:18px;overflow:hidden;
   display:grid;place-items:center;background:linear-gradient(135deg,#FFC45F,#F0A9F9);box-shadow:0 8px 20px rgba(8,28,45,.22);border:3px solid var(--surface)}
 .m4m-av img{width:100%;height:100%;object-fit:cover}
@@ -1718,8 +1791,12 @@ button.wh-rit:hover{border-color:var(--blue)}
 :root[data-theme="dark"] .pill.wtp-ind{color:var(--blue)}
 
 /* Nút làm mới Kudos Board (thay chấm LIVE cũ — bảng cập nhật khi tải lại) */
-.wt-kb-refresh{border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.08);color:#EAF4FB;font-family:inherit;font-size:10.5px;font-weight:750;padding:3px 9px;border-radius:999px;cursor:pointer;line-height:1.4}
-.wt-kb-refresh:hover{background:rgba(255,255,255,.16)}
+.wt-kb-refresh{border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.08);color:#EAF4FB;font-family:inherit;font-size:10.5px;font-weight:750;padding:3px 9px;border-radius:999px;cursor:pointer;line-height:1.4;display:inline-flex;align-items:center;gap:4px}
+.wt-kb-refresh:hover:not(:disabled){background:rgba(255,255,255,.16)}
+.wt-kb-refresh:disabled{opacity:.75;cursor:default}
+.wt-kb-rico{display:inline-block}
+.wt-kb-refresh.spinning .wt-kb-rico{animation:wt-spin .8s linear infinite}
+@keyframes wt-spin{to{transform:rotate(360deg)}}
 
 /* ═══════════ Wicer Card — nền tuỳ chọn, bỏ thẻ, thùng rác, quản trị ═══════════ */
 /* Nền ảnh/gradient trên thẻ + lớp phủ cho chữ dễ đọc */
@@ -1782,6 +1859,11 @@ button.wh-rit:hover{border-color:var(--blue)}
 /* HR Setting: tab 1 hàng cuộn ngang gọn gàng, giữ style tab underline chuẩn của app */
 .hrset .settabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
 .hrset .settab{white-space:nowrap;flex:none}
+.hrset-groupdesc{font-size:12.5px;color:var(--ink-2);margin:12px 2px 0;line-height:1.5;max-width:680px}
+.subtabs{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}
+.subtab{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;padding:7px 13px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:999px;cursor:pointer;transition:.15s;white-space:nowrap}
+.subtab:hover{border-color:var(--blue);color:var(--ink)}
+.subtab.on{background:var(--navy);border-color:var(--navy);color:#fff}
 .hrset-body{margin-top:18px}
 
 /* ═══════════ Chuẩn hoá NÚT BẤM toàn sản phẩm (hình học + trạng thái đồng nhất, giữ màu theo ngữ nghĩa) ═══════════ */

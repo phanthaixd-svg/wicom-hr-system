@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { bgStyle } from "../home/CardCollectionModal";
+import Modal from "@/components/ui/Modal";
 
 interface Card {
   id: string; message: string; emoji: string; background: string | null; category: string;
@@ -115,9 +116,7 @@ export default function CardsTab() {
 
       {/* Editor */}
       {draft && (
-        <div className="modal-overlay" onClick={() => setDraft(null)}>
-          <div className="modal-panel ct-editor" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close" onClick={() => setDraft(null)} aria-label="Đóng">✕</button>
+        <Modal onClose={() => setDraft(null)} panelClassName="ct-editor">
             <h3 style={{ marginBottom: 14 }}>{draft.id ? "Sửa thẻ" : "Thẻ mới"}</h3>
 
             <div className="ct-form">
@@ -191,8 +190,7 @@ export default function CardsTab() {
                 </div>
               </div>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </>
   );

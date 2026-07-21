@@ -66,14 +66,14 @@ https://wicer-hr.vercel.app/api/auth/lark/callback
 ```
 (Giữ luôn URL production cũ — Lark cho phép nhiều URL.)
 
-## Bước 6 — (Tuỳ chọn) Strava, nếu muốn test cả Move4Wishare
-Vì app bắt buộc kết nối Strava sau khi đăng nhập:
+## Bước 6 — (Khuyến khích) Strava, để test cả Move4Wishare
+Strava nay **KHÔNG bắt buộc**: sau khi đăng nhập Lark, người test thấy màn "Kết nối Strava" nhưng có nút **"Để sau, vào khám phá trước →"** để bỏ qua và vẫn dùng WiThanks/Wicer Card ngay. Họ kết nối Strava sau tại **Trang của tôi → Ứng dụng đã kết nối**.
+Muốn test đầy đủ Move4Wishare (tự nhận hoạt động), cấu hình Strava:
 - Tạo **1 app Strava riêng cho staging** ở strava.com/settings/api, đặt **Authorization Callback Domain** = `wicer-hr.vercel.app`.
 - Thêm vào Vercel env: `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`, `STRAVA_WEBHOOK_VERIFY_TOKEN` (tự đặt) → **Redeploy**.
-> Nếu chưa cấu hình Strava, người test sẽ bị kẹt ở màn "Kết nối Strava". Muốn cho phép bỏ qua Strava khi test → báo Claude thêm nút "Bỏ qua".
 
 ## Bước 7 — Kiểm tra (smoke test)
-1. Mở **https://wicer-hr.vercel.app** → đăng nhập Lark → (kết nối Strava) → vào app.
+1. Mở **https://wicer-hr.vercel.app** → đăng nhập Lark → (kết nối Strava hoặc bấm "Để sau") → vào app.
 2. Tài khoản của Sếp **tự động là Admin** (nhờ `ADMIN_EMAILS`). Mở **HR Setting** ở menu trái.
 3. Thử: tặng khoai 1 người · lật 1 thẻ Wicer Card · vào HR Setting cấp quyền HR cho 1 người test.
 4. Gửi link cho 3–5 người test.
