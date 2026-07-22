@@ -36,8 +36,17 @@ const getOrgHome = unstable_cache(async (): Promise<OrgHome> => {
   const ws = weekStart(now);
   const today0 = dayStart(now);
 
+  // Tất cả truy vấn toàn công ty chạy SONG SONG (độc lập nhau).
+  const [allActs, totalPeople, everyone, movedTodayRows, thanksWeek, moveWeekRows] = await Promise.all([
+    prisma.activity.findMany({ select: { employeeId: true, distanceKm: true, startDate: true, type: true, amountVnd: true } }),
+    prisma.employee.count(),
+    prisma.employee.findMany({ select: { id: true, name: true, avatarUrl: true, team: true, birthday: true, joinedAt: true, createdAt: true } }),
+    prisma.activity.findMany({ where: { startDate: { gte: today0 } }, select: { employeeId: true } }),
+    prisma.thanksGift.findMany({ where: { createdAt: { gte: ws } }, include: { sender: { select: { isAdmin: true } }, receiver: { select: { name: true } } } }),
+    prisma.activity.findMany({ where: { startDate: { gte: ws } }, select: { employeeId: true, distanceKm: true } }),
+  ]);
+
   // Phân bố huy hiệu toàn công ty (để tính thứ hạng phần trăm của tôi).
-  const allActs = await prisma.activity.findMany({ select: { employeeId: true, distanceKm: true, startDate: true, type: true, amountVnd: true } });
   const byEmp = new Map<string, { distanceKm: number; startDate: Date; type: string; amountVnd: number }[]>();
   for (const a of allActs) {
     const arr = byEmp.get(a.employeeId) ?? [];
@@ -45,12 +54,6 @@ const getOrgHome = unstable_cache(async (): Promise<OrgHome> => {
     byEmp.set(a.employeeId, arr);
   }
   const distribution = [...byEmp.values()].map(badgeMetrics);
-  const totalPeople = await prisma.employee.count();
-
-  // Nhịp công ty.
-  const everyone = await prisma.employee.findMany({
-    select: { id: true, name: true, avatarUrl: true, team: true, birthday: true, joinedAt: true, createdAt: true },
-  });
   const birthdaysWeek = everyone.filter((e) => e.birthday && isThisWeekAnnual(e.birthday, now))
     .map((e) => ({ id: e.id, name: e.name, avatarUrl: e.avatarUrl }));
   const annivWeek = everyone.filter((e) => isThisWeekAnnual(e.joinedAt ?? e.createdAt, now) && yearsSince(e.joinedAt ?? e.createdAt, now) >= 1)
@@ -59,15 +62,10 @@ const getOrgHome = unstable_cache(async (): Promise<OrgHome> => {
   const newMembers = everyone.filter((e) => (e.joinedAt ?? e.createdAt) >= thirtyDaysAgo)
     .map((e) => ({ id: e.id, name: e.name, avatarUrl: e.avatarUrl, team: e.team ?? "Wicom" }));
 
-  const movedTodayRows = await prisma.activity.findMany({ where: { startDate: { gte: today0 } }, select: { employeeId: true } });
   const movedTodayIds = new Set(movedTodayRows.map((r) => r.employeeId));
   const activeToday = everyone.filter((e) => movedTodayIds.has(e.id)).map((e) => ({ id: e.id, name: e.name, avatarUrl: e.avatarUrl }));
 
   // Vinh danh tuần: được cảm ơn nhất (loại khoai admin tặng) + quán quân Move tuần.
-  const thanksWeek = await prisma.thanksGift.findMany({
-    where: { createdAt: { gte: ws } },
-    include: { sender: { select: { isAdmin: true } }, receiver: { select: { name: true } } },
-  });
   const recvMap = new Map<string, { name: string; total: number }>();
   for (const t of thanksWeek) {
     if (t.sender.isAdmin) continue;
@@ -77,7 +75,6 @@ const getOrgHome = unstable_cache(async (): Promise<OrgHome> => {
   }
   const topThanks = [...recvMap.values()].sort((a, b) => b.total - a.total)[0] ?? null;
 
-  const moveWeekRows = await prisma.activity.findMany({ where: { startDate: { gte: ws } }, select: { employeeId: true, distanceKm: true } });
   const moveMap = new Map<string, number>();
   for (const r of moveWeekRows) moveMap.set(r.employeeId, (moveMap.get(r.employeeId) ?? 0) + r.distanceKm);
   const topMoveId = [...moveMap.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
@@ -101,17 +98,45 @@ export async function GET() {
   const now = new Date();
   const ws = weekStart(now);
   const today0 = dayStart(now);
+  const seasonStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1); // đầu quý
+  const todayKey = dateKeyVN(now);
+
+  // ── Chạy TẤT CẢ truy vấn độc lập SONG SONG (trước đây là ~7 đợt tuần tự → mỗi đợt 1 vòng
+  //    round-trip tới DB; gộp lại còn 1 đợt, giảm mạnh độ trễ trên serverless). ──
+  const [
+    myActs, sentAgg, recvAgg, sentWeek, sentToday, thanksReceived, myThanksWeeks,
+    deckCount, myDraws, todayDraw, distinctRows,
+    allowance, pendingRedemptions, activeGoals, org,
+  ] = await Promise.all([
+    prisma.activity.findMany({
+      where: { employeeId: emp.id },
+      select: { distanceKm: true, startDate: true, type: true, amountVnd: true },
+      orderBy: { startDate: "desc" },
+    }),
+    prisma.thanksGift.aggregate({ _sum: { khoai: true }, _count: true, where: { senderId: emp.id } }),
+    prisma.thanksGift.aggregate({ _sum: { khoai: true }, where: { receiverId: emp.id } }),
+    prisma.thanksGift.count({ where: { senderId: emp.id, createdAt: { gte: ws } } }),
+    prisma.thanksGift.count({ where: { senderId: emp.id, createdAt: { gte: today0 } } }),
+    prisma.thanksGift.findMany({
+      where: { receiverId: emp.id, createdAt: { gte: today0 } },
+      orderBy: { createdAt: "desc" },
+      include: { sender: { select: { name: true, avatarUrl: true } } },
+    }),
+    prisma.thanksGift.findMany({ where: { senderId: emp.id }, select: { createdAt: true } }),
+    prisma.wicerCard.count({ where: { active: true } }),
+    prisma.cardDraw.findMany({ where: { employeeId: emp.id }, orderBy: { drawnAt: "desc" }, take: 6 }),
+    prisma.cardDraw.findUnique({ where: { employeeId_dateKey: { employeeId: emp.id, dateKey: todayKey } } }),
+    prisma.cardDraw.findMany({ where: { employeeId: emp.id }, select: { cardId: true } }),
+    computeAllowance({ id: emp.id, wiRole: emp.wiRole, isAdmin: emp.isAdmin }),
+    prisma.redemption.count({ where: { employeeId: emp.id, status: "pending" } }),
+    prisma.goal.count({ where: { employeeId: emp.id, active: true } }),
+    getOrgHome(),
+  ]);
 
   // ── Hoạt động của tôi ──
-  const myActs = await prisma.activity.findMany({
-    where: { employeeId: emp.id },
-    select: { distanceKm: true, startDate: true, type: true, amountVnd: true },
-    orderBy: { startDate: "desc" },
-  });
   let totalVnd = 0, totalKm = 0, kmThisWeek = 0, kmSeason = 0;
   let movedToday = false;
   const activeWeeks = new Set<string>();
-  const seasonStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1); // đầu quý
   for (const a of myActs) {
     totalVnd += a.amountVnd;
     totalKm += a.distanceKm;
@@ -122,21 +147,9 @@ export async function GET() {
   }
 
   // ── Khoai (tặng/nhận) ──
-  const [sentAgg, recvAgg, sentWeek, sentToday, thanksReceived] = await Promise.all([
-    prisma.thanksGift.aggregate({ _sum: { khoai: true }, _count: true, where: { senderId: emp.id } }),
-    prisma.thanksGift.aggregate({ _sum: { khoai: true }, where: { receiverId: emp.id } }),
-    prisma.thanksGift.count({ where: { senderId: emp.id, createdAt: { gte: ws } } }),
-    prisma.thanksGift.count({ where: { senderId: emp.id, createdAt: { gte: today0 } } }),
-    prisma.thanksGift.findMany({
-      where: { receiverId: emp.id, createdAt: { gte: today0 } },
-      orderBy: { createdAt: "desc" },
-      include: { sender: { select: { name: true, avatarUrl: true } } },
-    }),
-  ]);
   const khoaiSent = sentAgg._sum.khoai ?? 0;
   const khoaiReceived = recvAgg._sum.khoai ?? 0;
   // tuần có tặng khoai cũng tính là "năng động"
-  const myThanksWeeks = await prisma.thanksGift.findMany({ where: { senderId: emp.id }, select: { createdAt: true } });
   for (const t of myThanksWeeks) activeWeeks.add(weekKey(t.createdAt));
 
   const streakWeeks = computeWeekStreak(activeWeeks);
@@ -144,7 +157,6 @@ export async function GET() {
   const rings = computeRings({ kmThisWeek, gaveThisWeek });
 
   // ── Huy hiệu — phân bố toàn công ty lấy từ cache dùng chung (60s) ──
-  const org = await getOrgHome();
   const myMetrics = badgeMetrics(myActs);
   const badges = computeBadgeStates(myMetrics, org.distribution, org.totalPeople);
   const badgeTiers = badges.reduce((n, b) => n + b.tier, 0);
@@ -154,25 +166,12 @@ export async function GET() {
   const level = levelFromXp(xp);
 
   // ── Wicer Card: bộ sưu tập + lá hôm nay ──
-  const todayKey = dateKeyVN(now);
-  const [deckCount, myDraws, todayDraw] = await Promise.all([
-    prisma.wicerCard.count({ where: { active: true } }),
-    prisma.cardDraw.findMany({ where: { employeeId: emp.id }, orderBy: { drawnAt: "desc" }, take: 6 }),
-    prisma.cardDraw.findUnique({ where: { employeeId_dateKey: { employeeId: emp.id, dateKey: todayKey } } }),
-  ]);
-  const distinctCards = new Set((await prisma.cardDraw.findMany({ where: { employeeId: emp.id }, select: { cardId: true } })).map((d) => d.cardId)).size;
+  const distinctCards = new Set(distinctRows.map((d) => d.cardId)).size;
 
   // ── Kỷ niệm / sinh nhật của tôi hôm nay ──
   const joined = emp.joinedAt ?? emp.createdAt;
   const anniversaryToday = isSameMonthDay(joined, now) && yearsSince(joined, now) >= 1;
   const birthdayToday = emp.birthday ? isSameMonthDay(emp.birthday, now) : false;
-
-  // ── Nudges ──
-  const [allowance, pendingRedemptions, activeGoals] = await Promise.all([
-    computeAllowance({ id: emp.id, wiRole: emp.wiRole, isAdmin: emp.isAdmin }),
-    prisma.redemption.count({ where: { employeeId: emp.id, status: "pending" } }),
-    prisma.goal.count({ where: { employeeId: emp.id, active: true } }),
-  ]);
 
   // Nhịp công ty + vinh danh tuần lấy từ org (cache dùng chung).
   return NextResponse.json({

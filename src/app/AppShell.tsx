@@ -117,6 +117,15 @@ export default function AppShell({
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
+  // Prefetch: khi vào thẳng Wicer Board, sau ~1.5s nạp ngầm 2 tab còn lại để bấm sang là hiện ngay
+  // (không phải chờ tải dữ liệu lúc bấm). Không prefetch nếu vào thẳng Trang của tôi / chi tiết hoạt động.
+  useEffect(() => {
+    if (initialArea !== null || initialActivityId) return;
+    const id = setTimeout(() => setVisited(new Set<Tab>(["home", "move", "withanks"])), 1500);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const gotoHub = (t?: Tab) => {
     const nextTab = t ?? tab;
     setArea(null);

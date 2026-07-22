@@ -67,19 +67,29 @@ async function computeDashboard(from: string, to: string, meId: string | null) {
   const fromDate = from ? new Date(`${from}T00:00:00`) : new Date(0);
   const toDate = to ? new Date(`${to}T23:59:59`) : new Date();
 
-  const activities = await prisma.activity.findMany({
-    where: { startDate: { gte: fromDate, lte: toDate }, ...meFilter },
-    include: { employee: { select: { id: true, name: true, team: true, avatarUrl: true } } },
-  });
-
   // Kỳ TRƯỚC (cùng độ dài, ngay liền trước) -> để tính thay đổi thứ hạng ▲/▼.
   const rangeMs = Math.max(0, toDate.getTime() - fromDate.getTime());
   const prevTo = new Date(fromDate.getTime() - 1);
   const prevFrom = new Date(prevTo.getTime() - rangeMs);
-  const prevActivities = await prisma.activity.findMany({
-    where: { startDate: { gte: prevFrom, lte: prevTo }, ...meFilter },
-    include: { employee: { select: { team: true } } },
-  });
+  const now = new Date();
+  const today0 = dayStartVN(now);
+
+  // Tất cả truy vấn độc lập chạy SONG SONG (giảm số vòng round-trip tới DB trên serverless).
+  const [activities, prevActivities, campaign, running, todayActs, totalPeopleCount, kindMap] = await Promise.all([
+    prisma.activity.findMany({
+      where: { startDate: { gte: fromDate, lte: toDate }, ...meFilter },
+      include: { employee: { select: { id: true, name: true, team: true, avatarUrl: true } } },
+    }),
+    prisma.activity.findMany({
+      where: { startDate: { gte: prevFrom, lte: prevTo }, ...meFilter },
+      include: { employee: { select: { team: true } } },
+    }),
+    prisma.campaign.findFirst({ where: { active: true }, orderBy: { startDate: "desc" } }),
+    prisma.campaign.findFirst({ where: { startDate: { lte: now }, endDate: { gte: now } }, orderBy: { startDate: "desc" } }),
+    prisma.activity.findMany({ where: { startDate: { gte: today0 } }, select: { amountVnd: true, employeeId: true } }),
+    prisma.employee.count({ where: { leftAt: null } }),
+    getKindMap(),
+  ]);
   interface PrevAgg { id: string; team: string | null; totalVnd: number; totalKm: number; activities: number; bySport: Record<string, SportAgg>; }
   const prevMap = new Map<string, PrevAgg>();
   for (const a of prevActivities) {
@@ -137,20 +147,7 @@ async function computeDashboard(from: string, to: string, meId: string | null) {
     sportTotals[key].vnd += a.amountVnd;
   }
 
-  const campaign = await prisma.campaign.findFirst({
-    where: { active: true },
-    orderBy: { startDate: "desc" },
-  });
-
-  // Chiến dịch ĐANG CHẠY theo NGÀY THỰC (hôm nay nằm trong [startDate, endDate]).
-  // Không phụ thuộc khoảng ngày filter. Null nếu hiện không có chiến dịch nào chạy.
-  const now = new Date();
-  const running = await prisma.campaign.findFirst({
-    where: { startDate: { lte: now }, endDate: { gte: now } },
-    orderBy: { startDate: "desc" },
-  });
-
-  // Quỹ của CẢ KỲ chiến dịch (dùng cho % tiến trình — ổn định, KHÔNG theo filter).
+  // Quỹ của CẢ KỲ chiến dịch đang chạy (dùng cho % tiến trình — ổn định, KHÔNG theo filter).
   let campaignFundVnd = 0;
   if (running) {
     const agg = await prisma.activity.aggregate({
@@ -160,13 +157,10 @@ async function computeDashboard(from: string, to: string, meId: string | null) {
     campaignFundVnd = agg._sum.amountVnd ?? 0;
   }
 
-  // Quỹ HÔM NAY + số người góp hôm nay (cho nhiệt kế "hôm nay +X"). Mốc "hôm nay" theo giờ VN.
-  const today0 = dayStartVN(now);
-  const todayActs = await prisma.activity.findMany({ where: { startDate: { gte: today0 } }, select: { amountVnd: true, employeeId: true } });
+  // Quỹ HÔM NAY + số người góp hôm nay (cho nhiệt kế "hôm nay +X").
   let todayVnd = 0;
   const todayPeople = new Set<string>();
   for (const a of todayActs) { todayVnd += a.amountVnd; todayPeople.add(a.employeeId); }
-  const totalPeopleCount = await prisma.employee.count({ where: { leftAt: null } });
 
   // Biểu đồ quỹ theo thời gian (bucket ~10 mốc, tự co theo khoảng lọc).
   const sodMs = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
@@ -185,8 +179,7 @@ async function computeDashboard(from: string, to: string, meId: string | null) {
     if (idx >= 0 && idx < dailyFund.length) dailyFund[idx].vnd += a.amountVnd;
   }
 
-  // KPI theo môn cho cột phải: Bơi km · Đạp km · Chạy km · Buổi Cầu lông · Buổi Khác.
-  const kindMap = await getKindMap();
+  // KPI theo môn cho cột phải: Bơi km · Đạp km · Chạy km · Buổi Cầu lông · Buổi Khác. (kindMap đã nạp song song ở trên)
   const isCauLong = (kindKey: string | null, source: string) =>
     source === "manual" && !!kindKey && (kindKey === "cau-long" || norm(kindMap[kindKey]?.nameVi ?? "").includes("cau long"));
   let sessCauLong = 0, sessOther = 0;
