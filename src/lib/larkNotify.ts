@@ -284,21 +284,3 @@ export async function sendLarkReaction(messageId: string, emojiType = process.en
     return false;
   }
 }
-
-// DM cho NGƯỜI GỬI sau khi tặng khoai trong group.
-export async function notifyGroupThanksGiver(openId: string, o: {
-  khoai: number; receiverLabel: string; message: string; weekRemaining: number | null; monthRemaining: number | null;
-}): Promise<boolean> {
-  const wk = o.weekRemaining == null ? "không giới hạn" : `${o.weekRemaining} củ`;
-  const mo = o.monthRemaining == null ? "không giới hạn" : `${o.monthRemaining} củ`;
-  const text = `Bạn vừa tặng ${o.khoai} củ khoai 🥔 cho ${o.receiverLabel}: “${o.message}”.\nSố khoai còn lại của bạn trong tuần là ${wk}, trong tháng là ${mo}.`;
-  return sendLarkText(openId, text);
-}
-
-// DM cho NGƯỜI NHẬN sau khi được tặng khoai trong group.
-export async function notifyGroupThanksReceiver(openId: string, o: {
-  khoai: number; giverName: string; message: string; totalBalance: number;
-}): Promise<boolean> {
-  const text = `Bạn vừa nhận ${o.khoai} củ khoai 🥔 từ ${o.giverName}: “${o.message}”.\nTổng số khoai bạn hiện có: ${o.totalBalance} củ.`;
-  return sendLarkText(openId, text);
-}

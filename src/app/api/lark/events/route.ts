@@ -3,7 +3,7 @@ import crypto from "crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { giveThanksFromLark, LarkGiveError } from "@/lib/larkGive";
-import { sendLarkText, sendLarkReaction, notifyGroupThanksGiver, notifyGroupThanksReceiver, larkNotifyEnabled } from "@/lib/larkNotify";
+import { sendLarkText, sendLarkReaction, notifyThanksGiven, notifyThanksReceived, larkNotifyEnabled } from "@/lib/larkNotify";
 import { revalidateHome } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
@@ -92,15 +92,24 @@ const POTATO_UNICODE = /🥔/gu;
 const POTATO_KEYS = (process.env.LARK_POTATO_KEYS || "Potato,SweetPotato,Khoai")
   .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 
+const isPotatoToken = (inner: string): boolean => {
+  const low = inner.toLowerCase();
+  return low.includes("potato") || low.includes("khoai") || POTATO_KEYS.includes(low);
+};
+
 // Đếm số "củ khoai": Unicode 🥔 + token [Key] khớp danh sách khoai (không phân biệt hoa thường).
 function countPotatoes(raw: string): number {
   const uni = (raw.match(POTATO_UNICODE) || []).length;
   let tokens = 0;
-  for (const b of raw.match(/\[([^\]]+)\]/g) || []) {
-    const inner = b.slice(1, -1).toLowerCase();
-    if (inner.includes("potato") || inner.includes("khoai") || POTATO_KEYS.includes(inner)) tokens++;
-  }
+  for (const b of raw.match(/\[([^\]]+)\]/g) || []) if (isPotatoToken(b.slice(1, -1))) tokens++;
   return uni + tokens;
+}
+
+// Bỏ mọi biểu diễn "khoai" (🥔 Unicode + token [Potato]/[khoai]) khỏi lời nhắn — chỉ giữ chữ.
+function stripPotatoes(text: string): string {
+  return text
+    .replace(POTATO_UNICODE, "")
+    .replace(/\[([^\]]+)\]/g, (full, inner) => (isPotatoToken(inner) ? "" : full));
 }
 
 // Parse tin nhắn: chỉ coi là lệnh tặng khi CÓ 🥔 VÀ CÓ @người (tránh nhiễu khi ai đó gõ 🥔 vu vơ).
@@ -117,10 +126,10 @@ function parseThanks(ev: LarkMessageEvent): { potatoes: number; receiverOpenIds:
   const receiverOpenIds = mentions.map((m) => m.id?.open_id).filter((x): x is string => Boolean(x));
   if (receiverOpenIds.length === 0) return null; // 🥔 nhưng không @ ai → bỏ qua
 
-  // Bỏ placeholder @_user_N khỏi lời nhắn; giữ nguyên phần chữ + 🥔.
+  // Lời nhắn = phần chữ, ĐÃ bỏ @mention và mọi 🥔/[potato] → chỉ còn text.
   let text = raw;
   for (const m of mentions) if (m.key) text = text.split(m.key).join("");
-  text = text.replace(/\s+/g, " ").trim();
+  text = stripPotatoes(text).replace(/\s+/g, " ").trim();
 
   return { potatoes, receiverOpenIds, text };
 }
@@ -151,22 +160,33 @@ async function handleMessage(ev: LarkMessageEvent): Promise<void> {
       senderOpenId,
       receiverOpenIds: parsed.receiverOpenIds,
       khoai: parsed.potatoes,
-      message: parsed.text || "🥔",
+      message: parsed.text || "Cảm ơn!",
     });
     console.log("[lark events] TẶNG OK:", res.khoai, "khoai →", res.receivers.map((r) => r.name).join(", "));
 
     await sendLarkReaction(msgId);
+
+    // DÙNG LẠI card của app (giống hệt tin nhắn tặng khoai trên web).
     if (res.giver.notifyThanks) {
-      const label = res.receivers.map((r) => `@${r.name}`).join(", ");
-      await notifyGroupThanksGiver(res.giver.openId, {
-        khoai: res.khoai, receiverLabel: label, message: res.message,
-        weekRemaining: res.weekRemaining, monthRemaining: res.monthRemaining,
+      const names = res.receivers.map((r) => r.name).join(", ");
+      const wk = res.weekRemaining == null ? "không giới hạn" : `${res.weekRemaining} củ`;
+      const mo = res.monthRemaining == null ? "không giới hạn" : `${res.monthRemaining} củ`;
+      await notifyThanksGiven(res.giver.openId, {
+        receiverNames: names,
+        khoai: res.khoai,
+        message: res.message,
+        remaining: `Số khoai còn lại của bạn trong tuần là ${wk}, trong tháng là ${mo}.`,
+        kind: "thanks",
       });
     }
     for (const r of res.receivers) {
       if (r.openId && r.notifyThanks) {
-        await notifyGroupThanksReceiver(r.openId, {
-          khoai: res.khoai, giverName: res.giver.name, message: res.message, totalBalance: r.newBalance,
+        await notifyThanksReceived(r.openId, {
+          giverName: res.giver.name,
+          khoai: res.khoai,
+          message: res.message,
+          totalBalance: r.newBalance,
+          kind: "thanks",
         });
       }
     }
