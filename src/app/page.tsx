@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import Logo from "./Logo";
+import LarkAutoLogin from "./LarkAutoLogin";
 
 const ERRORS: Record<string, string> = {
   state: "Phiên đăng nhập không hợp lệ, vui lòng thử lại.",
@@ -46,6 +47,8 @@ export default async function LoginPage({
           Dùng tài khoản Lark của Wicom để vào cổng. Chỉ nhân sự công ty mới truy cập được.
         </p>
         {error && <div className="err">{ERRORS[error] ?? "Đã có lỗi xảy ra."}</div>}
+        {/* Mở trong Lark → tự đăng nhập (免登). Ngoài Lark → không hiện gì, dùng nút bên dưới. */}
+        <LarkAutoLogin appId={process.env.LARK_CLIENT_ID ?? ""} />
         <a className="btn btn-lark" href="/api/auth/lark">
           <span className="ico-lark">L</span>Đăng nhập với Lark
         </a>

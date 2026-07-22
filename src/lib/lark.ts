@@ -2,6 +2,13 @@
 // Endpoint mặc định cho vùng quốc tế (larksuite.com); nếu Wicom dùng Feishu (feishu.cn)
 // thì đổi các biến LARK_*_URL trong .env. Xác nhận lại trong Lark Developer Console.
 
+import { prisma } from "./db";
+import { createSession } from "./session";
+import { isBootstrapAdminEmail } from "./admin";
+
+// Base cho các Open API (/open-apis/...); trùng với LARK_API_BASE dùng cho bot.
+const API_BASE = process.env.LARK_API_BASE || "https://open.larksuite.com";
+
 function env(key: string): string {
   const v = process.env[key];
   if (!v) throw new Error(`Thiếu biến môi trường ${key}`);
@@ -95,4 +102,69 @@ export function isAllowedTenant(user: LarkUser): boolean {
   if (!required) return true; // không siết -> cho qua
   if (!user.tenantKey) return true; // userinfo không trả tenant -> không chặn nhầm
   return user.tenantKey === required;
+}
+
+// Tạo/khởi tạo nhân sự từ hồ sơ Lark + tạo session. Dùng chung cho cả OAuth web lẫn H5免登.
+// Trả về đường dẫn nên điều hướng tiếp (đã kết nối Strava -> /dashboard, chưa -> /connect).
+export async function loginLarkUser(user: LarkUser): Promise<string> {
+  const bootstrapAdmin = isBootstrapAdminEmail(user.email);
+  const employee = await prisma.employee.upsert({
+    where: { larkOpenId: user.openId },
+    create: {
+      larkOpenId: user.openId,
+      larkUnionId: user.unionId,
+      name: user.name,
+      email: user.email,
+      avatarUrl: user.avatarUrl,
+      isAdmin: bootstrapAdmin,
+    },
+    update: {
+      name: user.name,
+      email: user.email,
+      avatarUrl: user.avatarUrl,
+      lastLogin: new Date(),
+      ...(bootstrapAdmin ? { isAdmin: true } : {}),
+    },
+    include: { stravaAccount: true },
+  });
+  await createSession({ employeeId: employee.id, name: employee.name, isAdmin: employee.isAdmin });
+  return employee.stravaAccount && !employee.stravaAccount.revokedAt ? "/dashboard" : "/connect";
+}
+
+// ── H5 免登 (đăng nhập ngầm khi app mở trong Lark) ──
+// app_access_token: cần để đổi login pre-auth code lấy hồ sơ user.
+async function getAppAccessToken(): Promise<string> {
+  const res = await fetch(`${API_BASE}/open-apis/auth/v3/app_access_token/internal`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ app_id: env("LARK_CLIENT_ID"), app_secret: env("LARK_CLIENT_SECRET") }),
+  });
+  const j = await res.json();
+  if (j.code !== 0 || !j.app_access_token) {
+    throw new Error(`app_access_token lỗi: ${j.code} ${j.msg}`);
+  }
+  return j.app_access_token as string;
+}
+
+// Đổi login pre-auth code (từ tt.requestAuthCode trong Lark) -> hồ sơ user.
+export async function larkH5CodeToUser(code: string): Promise<LarkUser> {
+  const appToken = await getAppAccessToken();
+  const res = await fetch(`${API_BASE}/open-apis/authen/v1/access_token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${appToken}` },
+    body: JSON.stringify({ grant_type: "authorization_code", code }),
+  });
+  const j = await res.json();
+  if (j.code !== 0 || !j.data) {
+    throw new Error(`authen access_token lỗi: ${j.code} ${j.msg}`);
+  }
+  const d = j.data;
+  return {
+    openId: d.open_id ?? "",
+    unionId: d.union_id ?? null,
+    name: d.name ?? d.en_name ?? "Nhân sự Wicom",
+    email: d.email ?? d.enterprise_email ?? null,
+    avatarUrl: d.avatar_url ?? d.avatar_big ?? null,
+    tenantKey: d.tenant_key ?? null,
+  };
 }
