@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { requireHR } from "@/lib/admin";
 import { getKindMap, computeKindAmount } from "@/lib/kinds";
 import { getConversionFromDate } from "@/lib/conversion";
+import { larkNotifyEnabled, notifyNewActivity } from "@/lib/larkNotify";
 
 export const dynamic = "force-dynamic";
 
@@ -111,5 +112,22 @@ export async function POST(req: NextRequest) {
       flagReason: null,
     },
   });
+
+  // B1 — báo cho chủ hoạt động khi được duyệt (luồng gửi tay, chạy được cả khi chưa có Strava).
+  if (larkNotifyEnabled()) {
+    const owner = await prisma.employee.findUnique({
+      where: { id: act.employeeId },
+      select: { larkOpenId: true, larkNotifyActivity: true },
+    });
+    if (owner?.larkOpenId && owner.larkNotifyActivity) {
+      void notifyNewActivity(owner.larkOpenId, {
+        activityName: act.name ?? "",
+        distanceKm: act.distanceKm,
+        amountVnd,
+        activityId: act.id,
+      }).catch(() => {});
+    }
+  }
+
   return NextResponse.json({ ok: true, action: "approve", amountVnd });
 }

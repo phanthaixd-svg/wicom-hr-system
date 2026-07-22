@@ -2,6 +2,7 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/db";
 import { getValidAccessToken, fetchActivity } from "@/lib/strava";
 import { upsertActivity, deleteActivity } from "@/lib/ingest";
+import { larkNotifyEnabled, notifyNewActivity } from "@/lib/larkNotify";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -69,7 +70,23 @@ async function processEvent(ev: StravaEvent): Promise<void> {
     // create hoặc update -> lấy chi tiết mới nhất rồi upsert.
     const token = await getValidAccessToken(account);
     const activity = await fetchActivity(token, ev.object_id);
-    await upsertActivity(account.employeeId, activity);
+    const result = await upsertActivity(account.employeeId, activity);
+
+    // B1 — chỉ bắn notify khi hoạt động THẬT SỰ MỚI (create + chưa từng có), không bắn khi update/backfill.
+    if (ev.aspect_type === "create" && result.isNew && larkNotifyEnabled()) {
+      const emp = await prisma.employee.findUnique({
+        where: { id: account.employeeId },
+        select: { larkOpenId: true, larkNotifyActivity: true },
+      });
+      if (emp?.larkOpenId && emp.larkNotifyActivity) {
+        await notifyNewActivity(emp.larkOpenId, {
+          activityName: result.name,
+          distanceKm: result.distanceKm,
+          amountVnd: result.amountVnd,
+          activityId: result.id,
+        });
+      }
+    }
   } catch (e) {
     console.error("Xử lý webhook lỗi", e);
   }

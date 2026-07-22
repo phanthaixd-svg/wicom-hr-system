@@ -24,7 +24,11 @@ model Employee {
   title      String? // chức vụ (vd. "CEO", "Trưởng phòng Marketing")
   isAdmin    Boolean  @default(false) // super admin (CEO) — cấp được quyền HR
   isHR       Boolean  @default(false) // HR — thấy & cấu hình HR Setting (admin cấp; không tự cấp quyền cho người khác)
-  larkNotifyReaction Boolean @default(true) // nhận DM Lark khi có người thả cảm xúc lên hoạt động của mình
+  larkNotifyReaction Boolean @default(true) // DM Lark khi có người thả cảm xúc lên hoạt động của mình
+  larkNotifyThanks   Boolean @default(true) // DM Lark khi nhận/gửi khoai (WiThanks)
+  larkNotifyComment  Boolean @default(true) // DM Lark khi có người bình luận hoạt động
+  larkNotifyActivity Boolean @default(true) // DM Lark khi hoạt động mới được ghi nhận
+  larkNotifyDigest   Boolean @default(true) // DM Lark tổng kết tuần (sáng thứ 2)
   createdAt  DateTime @default(now())
   lastLogin  DateTime @default(now())
 

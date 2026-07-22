@@ -725,7 +725,14 @@ a.act:hover .at{color:var(--blue)}
 
 /* Notify settings */
 .notify-card{padding:16px 18px!important}
-.notify-row{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.notify-head{margin-bottom:6px}
+.notify-list{display:flex;flex-direction:column}
+.notify-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:11px 0;border-bottom:1px solid var(--line)}
+.notify-list .notify-row:last-child{border-bottom:none}
+.notify-meta{display:flex;align-items:center;gap:11px;min-width:0}
+.notify-ic{font-size:18px;width:26px;text-align:center;flex:none}
+.notify-meta b{font-size:13.5px;display:block}
+.notify-sub{font-size:12px;color:var(--ink-3);display:block;margin-top:1px}
 .notify-hint{margin-top:10px;font-size:12px;color:var(--ink-3);background:var(--surface-2);border-radius:9px;padding:9px 11px;line-height:1.5}
 .notify-hint code{font-family:var(--mono);font-size:11px;background:var(--ground);padding:1px 5px;border-radius:5px}
 .switch{position:relative;width:46px;height:26px;border-radius:999px;border:none;background:var(--line);cursor:pointer;transition:background .2s;flex:none}

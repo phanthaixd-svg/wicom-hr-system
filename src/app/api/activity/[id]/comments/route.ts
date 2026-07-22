@@ -43,14 +43,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const act = await prisma.activity.findUnique({
     where: { id },
-    select: { id: true, name: true, type: true, employee: { select: { id: true, name: true, larkOpenId: true } } },
+    select: { id: true, name: true, type: true, employee: { select: { id: true, name: true, larkOpenId: true, larkNotifyComment: true } } },
   });
   if (!act) return NextResponse.json({ error: "notfound" }, { status: 404 });
 
   await prisma.comment.create({ data: { activityId: id, employeeId: session.employeeId, body } });
 
   // Bắn Lark cho chủ hoạt động (bỏ qua nếu tự bình luận bài của mình).
-  if (act.employee.id !== session.employeeId && larkNotifyEnabled() && act.employee.larkOpenId) {
+  if (act.employee.id !== session.employeeId && larkNotifyEnabled() && act.employee.larkOpenId && act.employee.larkNotifyComment) {
     void notifyComment({
       ownerOpenId: act.employee.larkOpenId,
       commenterName: session.name,

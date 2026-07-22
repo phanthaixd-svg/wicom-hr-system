@@ -8,7 +8,7 @@ import {
 } from "@/lib/withanks";
 import { creditKhoai, debitKhoai } from "@/lib/khoai";
 import { monthStartVN, yearStartVN } from "@/lib/wicer";
-import { larkNotifyEnabled, notifyThanksReceived, sendLarkText } from "@/lib/larkNotify";
+import { larkNotifyEnabled, notifyThanksReceived, notifyThanksGiven } from "@/lib/larkNotify";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
 
   const receivers = await prisma.employee.findMany({
     where: { id: { in: receiverIds } },
-    select: { id: true, name: true, larkOpenId: true, larkNotifyReaction: true },
+    select: { id: true, name: true, larkOpenId: true, larkNotifyThanks: true },
   });
   if (receivers.length === 0) return NextResponse.json({ error: "bad-receiver" }, { status: 400 });
 
@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "server" }, { status: 500 });
   }
 
-  void notifyAll(me, receivers, khoai, message, kind);
+  void notifyAll(me, receivers, khoai, message, kind, valueTags);
 
   const after = await computeAllowance(me);
   return NextResponse.json({ ok: true, sentTo: receivers.length, kind, allowance: after });
@@ -128,34 +128,34 @@ export async function POST(req: NextRequest) {
 
 async function notifyAll(
   me: { id: string; name: string; isAdmin: boolean; wiRole: string },
-  receivers: { id: string; name: string; larkOpenId: string; larkNotifyReaction: boolean }[],
+  receivers: { id: string; name: string; larkOpenId: string; larkNotifyThanks: boolean }[],
   khoai: number,
   message: string,
-  kind: string,
+  kind: "thanks" | "super" | "special",
+  valueTags: string[],
 ) {
   try {
     if (!larkNotifyEnabled()) return;
+    // Nhãn giá trị cốt lõi để hiện trên card (vd "💛 Tận tâm · 🤝 Đồng đội").
+    const valueTagLabel = valueTags.map((k) => VALUE_TAG_MAP[k]).filter(Boolean).map((v) => `${v.emoji} ${v.label}`).join(" · ") || undefined;
+    // Người NHẬN (A1)
     for (const r of receivers) {
-      if (!r.larkOpenId || !r.larkNotifyReaction) continue;
-      if (kind === "special") {
-        await sendLarkText(r.larkOpenId, `🎁 ${me.name} vừa dành tặng bạn một Special Gift!\n"${message}"\nHR sẽ liên hệ để trao món quà thật tới bạn. 💛`);
-        continue;
-      }
+      if (!r.larkOpenId || !r.larkNotifyThanks) continue;
       const fresh = await prisma.employee.findUnique({ where: { id: r.id }, select: { khoaiBalance: true } });
-      const prefix = kind === "super" ? "💜 Super Thanks! " : "";
-      await notifyThanksReceived(r.larkOpenId, { giverName: `${prefix}${me.name}`, khoai, message, totalBalance: fresh?.khoaiBalance ?? 0 });
+      await notifyThanksReceived(r.larkOpenId, { giverName: me.name, khoai, message, totalBalance: fresh?.khoaiBalance ?? 0, kind, valueTagLabel });
     }
-    const sender = await prisma.employee.findUnique({ where: { id: me.id }, select: { larkOpenId: true } });
-    if (sender?.larkOpenId) {
+    // Người GỬI (B2) — xác nhận
+    const sender = await prisma.employee.findUnique({ where: { id: me.id }, select: { larkOpenId: true, larkNotifyThanks: true } });
+    if (sender?.larkOpenId && sender.larkNotifyThanks) {
       const names = receivers.map((r) => r.name).join(", ");
-      if (kind === "special") {
-        await sendLarkText(sender.larkOpenId, `🎁 Bạn vừa gửi Special Gift cho ${names} (trừ ${SPECIAL_KHOAI}🥔). HR sẽ lo phần quà thật. Cảm ơn vì đã trân trọng đồng đội 💛`);
-      } else {
+      let remaining = "";
+      if (kind !== "special") {
         const after = await computeAllowance(me);
-        const rem = after.weekRemaining != null ? `Khoai còn: ${after.weekRemaining} củ tuần này, ${after.monthRemaining} củ tháng này.` : after.unlimited ? "" : `Khoai còn tháng này: ${after.monthRemaining} củ.`;
-        const label = kind === "super" ? "Super Thanks (30🥔)" : `${khoai} củ khoai`;
-        await sendLarkText(sender.larkOpenId, `🥔 Bạn vừa tặng ${label} cho ${names}:\n"${message}"\n${rem}`.trim());
+        remaining = after.unlimited ? "" : after.weekRemaining != null
+          ? `Khoai còn lại: ${after.weekRemaining} 🥔 tuần này · ${after.monthRemaining} 🥔 tháng này.`
+          : `Khoai còn lại tháng này: ${after.monthRemaining} 🥔.`;
       }
+      await notifyThanksGiven(sender.larkOpenId, { receiverNames: names, khoai, message, remaining, kind });
     }
   } catch (e) {
     console.warn("[withanks] notify lỗi:", e);
