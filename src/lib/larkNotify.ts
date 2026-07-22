@@ -261,3 +261,44 @@ export async function notifyWeeklyDigest(openId: string, o: { name: string; km: 
   ]);
   return sendCard(openId, card, `📊 Tuần qua: ${o.km.toFixed(1)}km · +${vnd(o.fundVnd)}đ quỹ · nhận ${o.khoaiReceived}🥔 · cho đi ${o.gaveCount} lần. Tuần mới bạn có ${o.weekAllowance ?? "∞"}🥔 để cảm ơn.`);
 }
+
+// ── WiThanks trong Lark group (tặng khoai bằng 🥔) ──
+
+// Thả reaction 🥔 lên tin nhắn gốc để xác nhận đã ghi nhận. Best-effort (lỗi không chặn luồng).
+// emoji_type mặc định "POTATO"; nếu Lark báo sai key, đổi qua env LARK_POTATO_EMOJI.
+export async function sendLarkReaction(messageId: string, emojiType = process.env.LARK_POTATO_EMOJI || "POTATO"): Promise<boolean> {
+  if (!larkNotifyEnabled()) return false;
+  const token = await getTenantAccessToken();
+  if (!token) return false;
+  try {
+    const res = await fetch(`${API_BASE}/open-apis/im/v1/messages/${messageId}/reactions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ reaction_type: { emoji_type: emojiType } }),
+    });
+    const j = await res.json();
+    if (j.code !== 0) { if (larkDebug()) console.warn("[lark reaction]", j.code, j.msg); return false; }
+    return true;
+  } catch (e) {
+    console.warn("[lark reaction] lỗi", e);
+    return false;
+  }
+}
+
+// DM cho NGƯỜI GỬI sau khi tặng khoai trong group.
+export async function notifyGroupThanksGiver(openId: string, o: {
+  khoai: number; receiverLabel: string; message: string; weekRemaining: number | null; monthRemaining: number | null;
+}): Promise<boolean> {
+  const wk = o.weekRemaining == null ? "không giới hạn" : `${o.weekRemaining} củ`;
+  const mo = o.monthRemaining == null ? "không giới hạn" : `${o.monthRemaining} củ`;
+  const text = `Bạn vừa tặng ${o.khoai} củ khoai 🥔 cho ${o.receiverLabel}: “${o.message}”.\nSố khoai còn lại của bạn trong tuần là ${wk}, trong tháng là ${mo}.`;
+  return sendLarkText(openId, text);
+}
+
+// DM cho NGƯỜI NHẬN sau khi được tặng khoai trong group.
+export async function notifyGroupThanksReceiver(openId: string, o: {
+  khoai: number; giverName: string; message: string; totalBalance: number;
+}): Promise<boolean> {
+  const text = `Bạn vừa nhận ${o.khoai} củ khoai 🥔 từ ${o.giverName}: “${o.message}”.\nTổng số khoai bạn hiện có: ${o.totalBalance} củ.`;
+  return sendLarkText(openId, text);
+}

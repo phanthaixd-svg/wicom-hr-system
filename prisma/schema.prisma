@@ -379,3 +379,9 @@ model Redemption {
 
   @@index([employeeId])
 }
+
+// Chống xử lý trùng lệnh tặng khoai từ Lark (Lark có thể gửi lại cùng 1 message).
+model LarkEventLog {
+  msgId     String   @id
+  createdAt DateTime @default(now())
+}
