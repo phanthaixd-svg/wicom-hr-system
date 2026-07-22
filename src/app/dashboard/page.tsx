@@ -16,5 +16,5 @@ export default async function DashboardPage() {
   if (!emp) redirect("/");
   // Strava là tuỳ chọn: user có thể bỏ qua ở bước /connect và kết nối sau trong "Trang của tôi".
 
-  return <AppShell meName={session.name} avatarUrl={emp.avatarUrl} isAdmin={emp.isAdmin} isHR={emp.isHR} initialTab="move" />;
+  return <AppShell meName={session.name} avatarUrl={emp.avatarUrl} isAdmin={emp.isAdmin} isHR={emp.isHR} initialTab="home" />;
 }

@@ -144,8 +144,7 @@ export default function GiveThanksModal({
             {tier === "special" && (
               <>
                 <div className="gt-philo">
-                  <div className="q">&quot;Niềm vui từ tiền thoáng qua, kỷ niệm thì ở lại.&quot;</div>
-                  <small>Google (Work Rules!): quà &amp; trải nghiệm khiến người ta vui hơn ~28% và đáng nhớ hơn so với tiền mặt. Special Gift = món quà thật + khoảnh khắc gặp nhau.</small>
+                  <div className="q">Hãy tặng 1 món quà đặc biệt nhất 1 lần mỗi năm cho người mà bạn muốn cảm ơn nhiều nhất.</div>
                 </div>
                 <div className="gt-ritual">
                   {[["💝", "Chọn người"], ["✍️", "Viết thật lòng"], ["🎁", "Quà <500k"], ["📸", "Check-in"], ["✅", "HR hoàn"]].map(([e, t]) => (
