@@ -87,7 +87,21 @@ interface LarkMessageEvent {
   };
 }
 
-const POTATO = /🥔/gu;
+const POTATO_UNICODE = /🥔/gu;
+// Emoji built-in của Lark xuất hiện trong text dạng [Key] (vd "[Potato]"). Cho thêm key qua env.
+const POTATO_KEYS = (process.env.LARK_POTATO_KEYS || "Potato,SweetPotato,Khoai")
+  .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+
+// Đếm số "củ khoai": Unicode 🥔 + token [Key] khớp danh sách khoai (không phân biệt hoa thường).
+function countPotatoes(raw: string): number {
+  const uni = (raw.match(POTATO_UNICODE) || []).length;
+  let tokens = 0;
+  for (const b of raw.match(/\[([^\]]+)\]/g) || []) {
+    const inner = b.slice(1, -1).toLowerCase();
+    if (inner.includes("potato") || inner.includes("khoai") || POTATO_KEYS.includes(inner)) tokens++;
+  }
+  return uni + tokens;
+}
 
 // Parse tin nhắn: chỉ coi là lệnh tặng khi CÓ 🥔 VÀ CÓ @người (tránh nhiễu khi ai đó gõ 🥔 vu vơ).
 function parseThanks(ev: LarkMessageEvent): { potatoes: number; receiverOpenIds: string[]; text: string } | null {
@@ -96,7 +110,7 @@ function parseThanks(ev: LarkMessageEvent): { potatoes: number; receiverOpenIds:
   let raw = "";
   try { raw = (JSON.parse(msg.content) as { text?: string }).text ?? ""; } catch { return null; }
 
-  const potatoes = (raw.match(POTATO) || []).length;
+  const potatoes = countPotatoes(raw);
   if (potatoes === 0) return null;
 
   const mentions = msg.mentions ?? [];
@@ -112,6 +126,9 @@ function parseThanks(ev: LarkMessageEvent): { potatoes: number; receiverOpenIds:
 }
 
 async function handleMessage(ev: LarkMessageEvent): Promise<void> {
+  // Log nội dung THÔ để biết chính xác "củ khoai" hiện ra thế nào (Unicode 🥔 hay token [Key]).
+  console.log("[lark events] content thô:", (ev.message?.content || "").slice(0, 250),
+    "| mentions:", (ev.message?.mentions || []).map((m) => m.name).join(",") || "(none)");
   const parsed = parseThanks(ev);
   console.log("[lark events] parse:",
     `chat_type=${ev.message?.chat_type} msg_type=${ev.message?.message_type}`,
