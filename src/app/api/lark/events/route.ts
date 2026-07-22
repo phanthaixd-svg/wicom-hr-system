@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import crypto from "crypto";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { giveThanksFromLark, LarkGiveError } from "@/lib/larkGive";
-import { sendLarkText, sendLarkReaction, notifyGroupThanksGiver, notifyGroupThanksReceiver } from "@/lib/larkNotify";
+import { sendLarkText, sendLarkReaction, notifyGroupThanksGiver, notifyGroupThanksReceiver, larkNotifyEnabled } from "@/lib/larkNotify";
 import { revalidateHome } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
@@ -17,14 +18,38 @@ function decrypt(encrypt: string, key: string): string {
   return Buffer.concat([decipher.update(data.subarray(16)), decipher.final()]).toString("utf8");
 }
 
+// GET: chẩn đoán cấu hình (không lộ bí mật) — để kiểm tra nhanh từ xa vì sao bot "im ru".
+export async function GET() {
+  let larkEventLogTable = false;
+  try { await prisma.larkEventLog.count(); larkEventLogTable = true; } catch { /* bảng chưa tạo */ }
+  let employees = -1;
+  try { employees = await prisma.employee.count(); } catch { /* DB lỗi */ }
+  return NextResponse.json({
+    endpoint: "ok",
+    larkNotifyEnabled: larkNotifyEnabled(),
+    hasClientId: !!process.env.LARK_CLIENT_ID,
+    hasClientSecret: !!process.env.LARK_CLIENT_SECRET,
+    hasVerificationToken: !!process.env.LARK_VERIFICATION_TOKEN,
+    hasEncryptKey: !!process.env.LARK_ENCRYPT_KEY,
+    larkEventLogTable, // false = migration Neon CHƯA chạy
+    employees,
+    apiBase: process.env.LARK_API_BASE || "https://open.larksuite.com",
+  });
+}
+
 // Lark gửi event tin nhắn về đây. Nhận diện lệnh tặng khoai (🥔 + @người nhận) trong group.
 export async function POST(req: NextRequest) {
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return NextResponse.json({}); }
 
   const encKey = process.env.LARK_ENCRYPT_KEY;
-  if (typeof body.encrypt === "string" && encKey) {
-    try { body = JSON.parse(decrypt(body.encrypt, encKey)); } catch { return NextResponse.json({}); }
+  if (typeof body.encrypt === "string") {
+    if (!encKey) {
+      console.warn("[lark events] payload đã mã hoá nhưng THIẾU LARK_ENCRYPT_KEY → không đọc được. Tắt Encrypt Key ở Lark hoặc set env.");
+      return NextResponse.json({});
+    }
+    try { body = JSON.parse(decrypt(body.encrypt, encKey)); }
+    catch (e) { console.error("[lark events] giải mã lỗi:", (e as Error).message); return NextResponse.json({}); }
   }
 
   // Xác thực URL khi thiết lập event subscription.
@@ -36,12 +61,16 @@ export async function POST(req: NextRequest) {
   const header = body.header as { token?: string; event_type?: string } | undefined;
   const expected = process.env.LARK_VERIFICATION_TOKEN;
   const token = header?.token ?? (body.token as string | undefined);
-  if (expected && token !== expected) return NextResponse.json({});
+  if (expected && token !== expected) {
+    console.warn("[lark events] Verification Token KHÔNG khớp → bỏ event. Kiểm tra LARK_VERIFICATION_TOKEN trên Vercel.");
+    return NextResponse.json({});
+  }
+
+  console.log("[lark events] nhận event:", header?.event_type ?? "(không rõ event_type)", "| keys:", Object.keys(body).join(","));
 
   if (header?.event_type === "im.message.receive_v1") {
     const ev = body.event as LarkMessageEvent;
-    // Trả 200 ngay, xử lý nền (Lark timeout 3s + retry nếu lỗi).
-    after(() => handleMessage(ev).catch((e) => console.error("[lark events] lỗi:", e)));
+    after(() => handleMessage(ev).catch((e) => console.error("[lark events] lỗi nền:", e)));
   }
   return NextResponse.json({});
 }
@@ -84,16 +113,20 @@ function parseThanks(ev: LarkMessageEvent): { potatoes: number; receiverOpenIds:
 
 async function handleMessage(ev: LarkMessageEvent): Promise<void> {
   const parsed = parseThanks(ev);
+  console.log("[lark events] parse:",
+    `chat_type=${ev.message?.chat_type} msg_type=${ev.message?.message_type}`,
+    parsed ? `→ ${parsed.potatoes}🥔, ${parsed.receiverOpenIds.length} người nhận` : "→ KHÔNG phải lệnh khoai (bỏ qua)");
   if (!parsed) return;
   const msgId = ev.message?.message_id;
   const senderOpenId = ev.sender?.sender_id?.open_id;
   if (!msgId || !senderOpenId) return;
 
-  // Chống xử lý trùng: đánh dấu message đã xử lý (Lark có thể gửi lại). Trùng → bỏ.
+  // Chống xử lý trùng. Trùng (P2002) → bỏ. Lỗi khác (vd bảng chưa tạo) → VẪN xử lý để không im ru.
   try {
     await prisma.larkEventLog.create({ data: { msgId } });
-  } catch {
-    return;
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") return;
+    console.warn("[lark events] dedupe bỏ qua (migration chưa chạy?):", (e as Error).message);
   }
 
   try {
@@ -103,11 +136,9 @@ async function handleMessage(ev: LarkMessageEvent): Promise<void> {
       khoai: parsed.potatoes,
       message: parsed.text || "🥔",
     });
+    console.log("[lark events] TẶNG OK:", res.khoai, "khoai →", res.receivers.map((r) => r.name).join(", "));
 
-    // Xác nhận công khai: thả reaction 🥔 lên tin gốc.
     await sendLarkReaction(msgId);
-
-    // DM người gửi.
     if (res.giver.notifyThanks) {
       const label = res.receivers.map((r) => `@${r.name}`).join(", ");
       await notifyGroupThanksGiver(res.giver.openId, {
@@ -115,7 +146,6 @@ async function handleMessage(ev: LarkMessageEvent): Promise<void> {
         weekRemaining: res.weekRemaining, monthRemaining: res.monthRemaining,
       });
     }
-    // DM từng người nhận.
     for (const r of res.receivers) {
       if (r.openId && r.notifyThanks) {
         await notifyGroupThanksReceiver(r.openId, {
@@ -125,8 +155,8 @@ async function handleMessage(ev: LarkMessageEvent): Promise<void> {
     }
     revalidateHome();
   } catch (e) {
-    // Lỗi nghiệp vụ → DM người gửi để họ biết vì sao không tặng được.
     if (e instanceof LarkGiveError) {
+      console.warn("[lark events] không tặng được:", e.reason, e.message);
       await sendLarkText(senderOpenId, `⚠️ Wicer chưa ghi nhận được lệnh tặng khoai: ${e.message}`);
     } else {
       console.error("[lark events] give lỗi:", e);
