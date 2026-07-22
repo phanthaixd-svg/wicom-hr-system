@@ -1,0 +1,18 @@
+import { PrismaClient } from "@prisma/client";
+const p = new PrismaClient();
+const t = async (label, fn) => { const s = Date.now(); await fn(); console.log(`  ${label}: ${Date.now()-s}ms`); };
+console.log("Neon host:", (process.env.DATABASE_URL||"").replace(/:[^:@]+@/, ":***@").split("@")[1]?.split("/")[0] || "?");
+await t("connect (cold)", () => p.$connect());
+await t("1 round-trip (employee.count)", () => p.employee.count());
+await t("1 round-trip lần 2 (warm)", () => p.employee.count());
+console.log("5 truy vấn TUẦN TỰ:");
+const s1 = Date.now();
+for (let i=0;i<5;i++) await p.employee.count();
+console.log(`  tổng: ${Date.now()-s1}ms (~${Math.round((Date.now()-s1)/5)}ms/round-trip)`);
+console.log("5 truy vấn SONG SONG (Promise.all):");
+const s2 = Date.now();
+await Promise.all(Array.from({length:5},()=>p.employee.count()));
+console.log(`  tổng: ${Date.now()-s2}ms`);
+await t("activity.findMany (toàn bộ)", () => p.activity.findMany());
+await t("thanksGift.findMany (toàn bộ)", () => p.thanksGift.findMany());
+await p.$disconnect();

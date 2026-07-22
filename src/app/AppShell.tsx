@@ -66,6 +66,10 @@ export default function AppShell({
   const [navOpen, setNavOpen] = useState(false);
   // Lazy-mount: chỉ dựng panel của tab đã được mở (tránh nạp dữ liệu 3 tab cùng lúc khi vừa vào).
   const [visited, setVisited] = useState<Set<Tab>>(() => new Set<Tab>([initialTab]));
+  // Giữ-mounted các KHU nặng đã mở (MyPage/HR Setting) → quay lại hiện ngay, KHÔNG fetch lại ("cache").
+  const [visitedArea, setVisitedArea] = useState<Set<Area>>(
+    () => new Set<Area>(initialArea && initialArea !== "activity" ? [initialArea] : [])
+  );
 
   const inHub = area === null;
   const canHRSetting = isAdmin || isHR;
@@ -99,11 +103,11 @@ export default function AppShell({
       const p = window.location.pathname;
       const sp = new URLSearchParams(window.location.search);
       const mAct = p.match(/^\/activity\/(.+)$/);
-      if (p === "/me") { setArea("me"); }
+      if (p === "/me") { setArea("me"); setVisitedArea((s) => (s.has("me") ? s : new Set(s).add("me"))); }
       else if (mAct) { setActivityId(decodeURIComponent(mAct[1])); setArea("activity"); }
       else {
         const a = sp.get("area");
-        if (a === "hrsetting" || a === "records" || a === "learn" || a === "ai") setArea(a as Area);
+        if (a === "hrsetting" || a === "records" || a === "learn" || a === "ai") { setArea(a as Area); setVisitedArea((s) => (s.has(a as Area) ? s : new Set(s).add(a as Area))); }
         else {
           setArea(null);
           const t = sp.get("tab");
@@ -137,6 +141,7 @@ export default function AppShell({
   };
   const gotoArea = (a: Area) => {
     setArea(a);
+    setVisitedArea((s) => (s.has(a) ? s : new Set(s).add(a)));
     setNavOpen(false);
     pushUrl(a, tab, activityId);
     window.scrollTo({ top: 0 });
@@ -222,38 +227,41 @@ export default function AppShell({
           )}
         </header>
 
-        {inHub ? (
-          <>
-            {visited.has("home") && (
-              <div className="wb-panel" hidden={tab !== "home"}>
-                <WicerHome />
-              </div>
-            )}
-            {visited.has("move") && (
-              <div className="wb-panel" hidden={tab !== "move"}>
-                <Dashboard />
-              </div>
-            )}
-            {visited.has("withanks") && (
-              <div className="wb-panel" hidden={tab !== "withanks"}>
-                <WiThanks />
-              </div>
-            )}
-            {tab === "wigrow" && (
-              <div className="wb-ph">
-                <div className="wbph-card">
-                  <div className="wbph-ic">{WIGROW_INFO.icon}</div>
-                  <h2>{WIGROW_INFO.title}</h2>
-                  <p className="lead">{WIGROW_INFO.desc}</p>
-                </div>
-              </div>
-            )}
-          </>
-        ) : area === "me" ? (
-          <div className="wb-panel"><MyPage /></div>
-        ) : area === "hrsetting" ? (
-          <div className="wb-panel">{canHRSetting ? <HRSetting isAdmin={isAdmin} /> : null}</div>
-        ) : area === "activity" ? (
+        {/* HUB — luôn giữ mounted (ẩn khi rời khỏi Board) để quay lại không phải fetch lại */}
+        {visited.has("home") && (
+          <div className="wb-panel" hidden={!inHub || tab !== "home"}>
+            <WicerHome />
+          </div>
+        )}
+        {visited.has("move") && (
+          <div className="wb-panel" hidden={!inHub || tab !== "move"}>
+            <Dashboard />
+          </div>
+        )}
+        {visited.has("withanks") && (
+          <div className="wb-panel" hidden={!inHub || tab !== "withanks"}>
+            <WiThanks />
+          </div>
+        )}
+        {inHub && tab === "wigrow" && (
+          <div className="wb-ph">
+            <div className="wbph-card">
+              <div className="wbph-ic">{WIGROW_INFO.icon}</div>
+              <h2>{WIGROW_INFO.title}</h2>
+              <p className="lead">{WIGROW_INFO.desc}</p>
+            </div>
+          </div>
+        )}
+
+        {/* MyPage & HR Setting — giữ mounted sau lần đầu mở → chuyển qua lại hiện ngay */}
+        {visitedArea.has("me") && (
+          <div className="wb-panel" hidden={area !== "me"}><MyPage /></div>
+        )}
+        {visitedArea.has("hrsetting") && (
+          <div className="wb-panel" hidden={area !== "hrsetting"}>{canHRSetting ? <HRSetting isAdmin={isAdmin} /> : null}</div>
+        )}
+
+        {area === "activity" && (
           <div className="wb-panel">
             <div className="wrap">
               <div className="toolbar" style={{ marginBottom: 4 }}>
@@ -262,12 +270,14 @@ export default function AppShell({
               <ActivityView id={activityId ?? ""} idPrefix="page" />
             </div>
           </div>
-        ) : (
+        )}
+
+        {(area === "records" || area === "learn" || area === "ai") && (
           <div className="wb-ph">
             <div className="wbph-card">
-              <div className="wbph-ic">{AREA_INFO[area as "records" | "learn" | "ai"].icon}</div>
-              <h2>{AREA_INFO[area as "records" | "learn" | "ai"].title}</h2>
-              <p className="lead">{AREA_INFO[area as "records" | "learn" | "ai"].desc}</p>
+              <div className="wbph-ic">{AREA_INFO[area].icon}</div>
+              <h2>{AREA_INFO[area].title}</h2>
+              <p className="lead">{AREA_INFO[area].desc}</p>
               <button className="btn-cancel" style={{ marginTop: 18 }} onClick={() => gotoHub()}>← Về Wicer Board</button>
             </div>
           </div>
