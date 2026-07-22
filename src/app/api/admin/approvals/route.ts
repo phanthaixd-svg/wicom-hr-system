@@ -4,6 +4,7 @@ import { requireHR } from "@/lib/admin";
 import { getKindMap, computeKindAmount } from "@/lib/kinds";
 import { getConversionFromDate } from "@/lib/conversion";
 import { larkNotifyEnabled, notifyNewActivity } from "@/lib/larkNotify";
+import { revalidateBoards } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
 
@@ -90,6 +91,7 @@ export async function POST(req: NextRequest) {
         flagReason: "Đã từ chối quy đổi",
       },
     });
+    revalidateBoards(); // đổi quy đổi/ghi nhận → làm mới bảng tổng
     return NextResponse.json({ ok: true, action: "reject" });
   }
 
@@ -129,5 +131,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  revalidateBoards(); // đã quy đổi tiền → làm mới bảng tổng ngay
   return NextResponse.json({ ok: true, action: "approve", amountVnd });
 }

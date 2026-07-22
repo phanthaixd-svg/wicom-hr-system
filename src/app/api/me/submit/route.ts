@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import { revalidateBoards } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
 
@@ -70,5 +71,6 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  revalidateBoards(); // hoạt động mới (dù chờ duyệt) → làm mới bảng tổng
   return NextResponse.json({ ok: true, id: act.id });
 }

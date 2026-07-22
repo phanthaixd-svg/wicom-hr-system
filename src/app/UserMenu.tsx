@@ -9,18 +9,23 @@ export default function UserMenu({
   avatarUrl,
   isAdmin,
   activeAdmin,
+  onGoMe,
 }: {
   meName: string;
   avatarUrl: string | null;
   isAdmin: boolean;
   activeAdmin?: boolean;
+  onGoMe?: () => void; // điều hướng "mượt" trong SPA (không reload); nếu không có sẽ dùng href
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const toggleTheme = () => {
     const r = document.documentElement;
     const c = r.getAttribute("data-theme") ?? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-    r.setAttribute("data-theme", c === "dark" ? "light" : "dark");
+    const next = c === "dark" ? "light" : "dark";
+    r.setAttribute("data-theme", next);
+    try { localStorage.setItem("wm-theme", next); } catch { /* bỏ qua nếu chặn storage */ }
+    setMenuOpen(false);
   };
 
   return (
@@ -36,9 +41,15 @@ export default function UserMenu({
         <>
           <div className="menu-backdrop" onClick={() => setMenuOpen(false)} />
           <div className="usermenu-pop" role="menu">
-            <a className="um-item" href="/me" role="menuitem">
-              <span className="um-ic">👤</span> Trang của tôi
-            </a>
+            {onGoMe ? (
+              <button className="um-item" role="menuitem" onClick={() => { setMenuOpen(false); onGoMe(); }} style={{ width: "100%" }}>
+                <span className="um-ic">👤</span> Trang của tôi
+              </button>
+            ) : (
+              <a className="um-item" href="/me" role="menuitem">
+                <span className="um-ic">👤</span> Trang của tôi
+              </a>
+            )}
             <button className="um-item" role="menuitem" onClick={() => toggleTheme()}>
               <span className="um-ic">◐</span> Chế độ ngày / đêm
             </button>

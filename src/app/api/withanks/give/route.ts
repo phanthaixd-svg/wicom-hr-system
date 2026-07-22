@@ -9,6 +9,7 @@ import {
 import { creditKhoai, debitKhoai } from "@/lib/khoai";
 import { monthStartVN, yearStartVN } from "@/lib/wicer";
 import { larkNotifyEnabled, notifyThanksReceived, notifyThanksGiven } from "@/lib/larkNotify";
+import { revalidateHome } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
 
@@ -122,6 +123,7 @@ export async function POST(req: NextRequest) {
 
   void notifyAll(me, receivers, khoai, message, kind, valueTags);
 
+  revalidateHome(); // tặng khoai → cập nhật "vinh danh tuần" ở Wicer Home ngay
   const after = await computeAllowance(me);
   return NextResponse.json({ ok: true, sentTo: receivers.length, kind, allowance: after });
 }

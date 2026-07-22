@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import { badgeMetrics, computeBadgeStates } from "@/lib/badges";
+import { badgeMetrics, computeBadgeStates, BadgeMetrics } from "@/lib/badges";
 import { computeAllowance } from "@/lib/withanks";
 import {
   computeXp, levelFromXp, computeRings, computeWeekStreak, titleStates,
@@ -11,6 +12,84 @@ import {
 export const dynamic = "force-dynamic";
 
 const dayStart = (d = new Date()) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+// Phần dữ liệu TOÀN CÔNG TY của Wicer Home (phân bố huy hiệu + nhịp công ty + vinh danh tuần):
+// giống hệt nhau cho mọi người, nhưng trước đây tính lại cho TỪNG lượt vào của TỪNG user
+// (nạp toàn bộ hoạt động của mọi người mỗi lần → rất nặng). Nay cache 60s, dùng chung.
+type OrgHome = {
+  distribution: BadgeMetrics[];
+  totalPeople: number;
+  pulse: {
+    birthdaysWeek: { id: string; name: string; avatarUrl: string | null }[];
+    annivWeek: { id: string; name: string; avatarUrl: string | null; years: number }[];
+    newMembers: { id: string; name: string; avatarUrl: string | null; team: string }[];
+    activeToday: { id: string; name: string; avatarUrl: string | null }[];
+  };
+  honor: {
+    topThanks: { name: string; total: number } | null;
+    topMove: { name: string; km: number } | null;
+  };
+};
+
+const getOrgHome = unstable_cache(async (): Promise<OrgHome> => {
+  const now = new Date();
+  const ws = weekStart(now);
+  const today0 = dayStart(now);
+
+  // Phân bố huy hiệu toàn công ty (để tính thứ hạng phần trăm của tôi).
+  const allActs = await prisma.activity.findMany({ select: { employeeId: true, distanceKm: true, startDate: true, type: true, amountVnd: true } });
+  const byEmp = new Map<string, { distanceKm: number; startDate: Date; type: string; amountVnd: number }[]>();
+  for (const a of allActs) {
+    const arr = byEmp.get(a.employeeId) ?? [];
+    arr.push(a);
+    byEmp.set(a.employeeId, arr);
+  }
+  const distribution = [...byEmp.values()].map(badgeMetrics);
+  const totalPeople = await prisma.employee.count();
+
+  // Nhịp công ty.
+  const everyone = await prisma.employee.findMany({
+    select: { id: true, name: true, avatarUrl: true, team: true, birthday: true, joinedAt: true, createdAt: true },
+  });
+  const birthdaysWeek = everyone.filter((e) => e.birthday && isThisWeekAnnual(e.birthday, now))
+    .map((e) => ({ id: e.id, name: e.name, avatarUrl: e.avatarUrl }));
+  const annivWeek = everyone.filter((e) => isThisWeekAnnual(e.joinedAt ?? e.createdAt, now) && yearsSince(e.joinedAt ?? e.createdAt, now) >= 1)
+    .map((e) => ({ id: e.id, name: e.name, avatarUrl: e.avatarUrl, years: yearsSince(e.joinedAt ?? e.createdAt, now) }));
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000);
+  const newMembers = everyone.filter((e) => (e.joinedAt ?? e.createdAt) >= thirtyDaysAgo)
+    .map((e) => ({ id: e.id, name: e.name, avatarUrl: e.avatarUrl, team: e.team ?? "Wicom" }));
+
+  const movedTodayRows = await prisma.activity.findMany({ where: { startDate: { gte: today0 } }, select: { employeeId: true } });
+  const movedTodayIds = new Set(movedTodayRows.map((r) => r.employeeId));
+  const activeToday = everyone.filter((e) => movedTodayIds.has(e.id)).map((e) => ({ id: e.id, name: e.name, avatarUrl: e.avatarUrl }));
+
+  // Vinh danh tuần: được cảm ơn nhất (loại khoai admin tặng) + quán quân Move tuần.
+  const thanksWeek = await prisma.thanksGift.findMany({
+    where: { createdAt: { gte: ws } },
+    include: { sender: { select: { isAdmin: true } }, receiver: { select: { name: true } } },
+  });
+  const recvMap = new Map<string, { name: string; total: number }>();
+  for (const t of thanksWeek) {
+    if (t.sender.isAdmin) continue;
+    const cur = recvMap.get(t.receiverId) ?? { name: t.receiver.name, total: 0 };
+    cur.total += t.khoai;
+    recvMap.set(t.receiverId, cur);
+  }
+  const topThanks = [...recvMap.values()].sort((a, b) => b.total - a.total)[0] ?? null;
+
+  const moveWeekRows = await prisma.activity.findMany({ where: { startDate: { gte: ws } }, select: { employeeId: true, distanceKm: true } });
+  const moveMap = new Map<string, number>();
+  for (const r of moveWeekRows) moveMap.set(r.employeeId, (moveMap.get(r.employeeId) ?? 0) + r.distanceKm);
+  const topMoveId = [...moveMap.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const topMove = topMoveId ? { name: everyone.find((e) => e.id === topMoveId)?.name ?? "—", km: Math.round(moveMap.get(topMoveId) ?? 0) } : null;
+
+  return {
+    distribution,
+    totalPeople,
+    pulse: { birthdaysWeek, annivWeek, newMembers, activeToday },
+    honor: { topThanks: topThanks ? { name: topThanks.name, total: topThanks.total } : null, topMove },
+  };
+}, ["wicer-home-org-v1"], { revalidate: 60, tags: ["home"] });
 
 export async function GET() {
   const session = await getSession();
@@ -64,17 +143,10 @@ export async function GET() {
   const gaveThisWeek = sentWeek > 0;
   const rings = computeRings({ kmThisWeek, gaveThisWeek });
 
-  // ── Huy hiệu (dùng lại hệ badges) ──
-  const allActs = await prisma.activity.findMany({ select: { employeeId: true, distanceKm: true, startDate: true, type: true, amountVnd: true } });
-  const byEmp = new Map<string, { distanceKm: number; startDate: Date; type: string; amountVnd: number }[]>();
-  for (const a of allActs) {
-    const arr = byEmp.get(a.employeeId) ?? [];
-    arr.push(a);
-    byEmp.set(a.employeeId, arr);
-  }
-  const myMetrics = badgeMetrics(byEmp.get(emp.id) ?? []);
-  const totalPeople = await prisma.employee.count();
-  const badges = computeBadgeStates(myMetrics, [...byEmp.values()].map(badgeMetrics), totalPeople);
+  // ── Huy hiệu — phân bố toàn công ty lấy từ cache dùng chung (60s) ──
+  const org = await getOrgHome();
+  const myMetrics = badgeMetrics(myActs);
+  const badges = computeBadgeStates(myMetrics, org.distribution, org.totalPeople);
   const badgeTiers = badges.reduce((n, b) => n + b.tier, 0);
 
   // ── Level / XP ──
@@ -102,43 +174,7 @@ export async function GET() {
     prisma.goal.count({ where: { employeeId: emp.id, active: true } }),
   ]);
 
-  // ── Nhịp công ty (pulse) ──
-  const everyone = await prisma.employee.findMany({
-    select: { id: true, name: true, avatarUrl: true, team: true, birthday: true, joinedAt: true, createdAt: true, isAdmin: true },
-  });
-  const birthdaysWeek = everyone.filter((e) => e.birthday && isThisWeekAnnual(e.birthday, now))
-    .map((e) => ({ id: e.id, name: e.name, avatarUrl: e.avatarUrl }));
-  const annivWeek = everyone.filter((e) => isThisWeekAnnual(e.joinedAt ?? e.createdAt, now) && yearsSince(e.joinedAt ?? e.createdAt, now) >= 1)
-    .map((e) => ({ id: e.id, name: e.name, avatarUrl: e.avatarUrl, years: yearsSince(e.joinedAt ?? e.createdAt, now) }));
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000);
-  const newMembers = everyone.filter((e) => (e.joinedAt ?? e.createdAt) >= thirtyDaysAgo)
-    .map((e) => ({ id: e.id, name: e.name, avatarUrl: e.avatarUrl, team: e.team ?? "Wicom" }));
-
-  // Ai đã vận động hôm nay
-  const movedTodayRows = await prisma.activity.findMany({ where: { startDate: { gte: today0 } }, select: { employeeId: true } });
-  const movedTodayIds = new Set(movedTodayRows.map((r) => r.employeeId));
-  const activeToday = everyone.filter((e) => movedTodayIds.has(e.id)).map((e) => ({ id: e.id, name: e.name, avatarUrl: e.avatarUrl }));
-
-  // Vinh danh tuần: được cảm ơn nhất (loại khoai admin tặng) + quán quân Move tuần
-  const thanksWeek = await prisma.thanksGift.findMany({
-    where: { createdAt: { gte: ws } },
-    include: { sender: { select: { isAdmin: true } }, receiver: { select: { name: true } } },
-  });
-  const recvMap = new Map<string, { name: string; total: number }>();
-  for (const t of thanksWeek) {
-    if (t.sender.isAdmin) continue;
-    const cur = recvMap.get(t.receiverId) ?? { name: t.receiver.name, total: 0 };
-    cur.total += t.khoai;
-    recvMap.set(t.receiverId, cur);
-  }
-  const topThanks = [...recvMap.values()].sort((a, b) => b.total - a.total)[0] ?? null;
-
-  const moveWeekRows = await prisma.activity.findMany({ where: { startDate: { gte: ws } }, select: { employeeId: true, distanceKm: true } });
-  const moveMap = new Map<string, number>();
-  for (const r of moveWeekRows) moveMap.set(r.employeeId, (moveMap.get(r.employeeId) ?? 0) + r.distanceKm);
-  const topMoveId = [...moveMap.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-  const topMove = topMoveId ? { name: everyone.find((e) => e.id === topMoveId)?.name ?? "—", km: Math.round(moveMap.get(topMoveId) ?? 0) } : null;
-
+  // Nhịp công ty + vinh danh tuần lấy từ org (cache dùng chung).
   return NextResponse.json({
     me: {
       name: emp.name,
@@ -178,13 +214,13 @@ export async function GET() {
       activeGoals,
     },
     pulse: {
-      birthdaysWeek,
-      annivWeek,
-      newMembers,
-      activeToday,
+      birthdaysWeek: org.pulse.birthdaysWeek,
+      annivWeek: org.pulse.annivWeek,
+      newMembers: org.pulse.newMembers,
+      activeToday: org.pulse.activeToday,
       honor: {
-        topThanks: topThanks ? { name: topThanks.name, total: topThanks.total } : null,
-        topMove,
+        topThanks: org.honor.topThanks,
+        topMove: org.honor.topMove,
         idea: null, // WiGrow — sắp ra mắt
       },
     },

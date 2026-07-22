@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getValidAccessToken, fetchActivity } from "@/lib/strava";
 import { upsertActivity, deleteActivity } from "@/lib/ingest";
 import { larkNotifyEnabled, notifyNewActivity } from "@/lib/larkNotify";
+import { revalidateBoards } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -64,6 +65,7 @@ async function processEvent(ev: StravaEvent): Promise<void> {
     if (ev.aspect_type === "delete") {
       // Chỉ xoá hoạt động THUỘC VỀ chủ tài khoản của owner_id này (chống payload giả mạo xoá dữ liệu người khác).
       await deleteActivity(String(ev.object_id), account.employeeId);
+      revalidateBoards(); // hoạt động bị xoá → làm mới bảng tổng
       return;
     }
 
@@ -71,6 +73,7 @@ async function processEvent(ev: StravaEvent): Promise<void> {
     const token = await getValidAccessToken(account);
     const activity = await fetchActivity(token, ev.object_id);
     const result = await upsertActivity(account.employeeId, activity);
+    revalidateBoards(); // hoạt động mới/cập nhật từ Strava → làm mới bảng tổng
 
     // B1 — chỉ bắn notify khi hoạt động THẬT SỰ MỚI (create + chưa từng có), không bắn khi update/backfill.
     if (ev.aspect_type === "create" && result.isNew && larkNotifyEnabled()) {

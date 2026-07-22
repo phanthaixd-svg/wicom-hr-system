@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { SPORT_ORDER, SPORTS, SportKey } from "@/lib/sports";
@@ -31,10 +32,38 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const url = new URL(req.url);
-  const from = url.searchParams.get("from");
-  const to = url.searchParams.get("to");
+  const from = url.searchParams.get("from") ?? "";
+  const to = url.searchParams.get("to") ?? "";
   const meOnly = url.searchParams.get("me") === "1"; // lọc "Chỉ tôi"
-  const meFilter = meOnly ? { employeeId: session.employeeId } : {};
+
+  // Bảng tổng (mọi người) giống hệt nhau cho tất cả user trong cùng khoảng ngày → cache 60s,
+  // 25 người vào cùng lúc chỉ tính 1 lần thay vì 25 lần. Chế độ "Chỉ tôi" là dữ liệu riêng nên không cache.
+  const data = meOnly
+    ? await computeDashboard(from, to, session.employeeId)
+    : await computeDashboardCached(from, to);
+
+  // Gắn phần "của tôi" (rẻ, theo phiên) sau khi lấy phần tổng.
+  for (const e of data.byEmployee) e.isMe = e.id === session.employeeId;
+  const meEmp = await prisma.employee.findUnique({ where: { id: session.employeeId }, select: { name: true, avatarUrl: true } });
+
+  return NextResponse.json({
+    ...data,
+    meOnly,
+    me: { id: session.employeeId, name: meEmp?.name ?? "Tôi", avatarUrl: meEmp?.avatarUrl ?? null },
+    meId: session.employeeId,
+  });
+}
+
+// Bản cache cho chế độ "mọi người" (không phụ thuộc phiên), khoá theo khoảng ngày.
+const computeDashboardCached = unstable_cache(
+  (from: string, to: string) => computeDashboard(from, to, null),
+  ["dashboard-org-v1"],
+  { revalidate: 60, tags: ["dashboard"] }
+);
+
+// Tính toàn bộ số liệu bảng tổng. meId != null → chỉ tính cho 1 người ("Chỉ tôi"). Trả về JSON-safe.
+async function computeDashboard(from: string, to: string, meId: string | null) {
+  const meFilter = meId ? { employeeId: meId } : {};
   const fromDate = from ? new Date(`${from}T00:00:00`) : new Date(0);
   const toDate = to ? new Date(`${to}T23:59:59`) : new Date();
 
@@ -85,7 +114,7 @@ export async function GET(req: NextRequest) {
         name: a.employee.name,
         team: a.employee.team,
         avatarUrl: a.employee.avatarUrl,
-        isMe: a.employeeId === session.employeeId,
+        isMe: false, // gắn theo phiên ở GET (sau khi lấy từ cache)
         totalVnd: 0,
         totalKm: 0,
         activities: 0,
@@ -171,15 +200,10 @@ export async function GET(req: NextRequest) {
     cauLong: sessCauLong, other: sessOther,
   };
 
-  const meEmp = await prisma.employee.findUnique({ where: { id: session.employeeId }, select: { name: true, avatarUrl: true } });
-
-  return NextResponse.json({
+  return {
     today: { vnd: todayVnd, people: todayPeople.size, totalPeople: totalPeopleCount },
     dailyFund,
     kpi,
-    meOnly,
-    me: { id: session.employeeId, name: meEmp?.name ?? "Tôi", avatarUrl: meEmp?.avatarUrl ?? null },
-    meId: session.employeeId,
     goalVnd: campaign ? Number(campaign.goalVnd) : 0,
     campaignName: campaign?.name ?? "Chiến dịch gây quỹ",
     campaignDesc: campaign?.description ?? "",
@@ -203,5 +227,5 @@ export async function GET(req: NextRequest) {
     sports: SPORT_ORDER.map((k) => ({ key: k, vi: SPORTS[k].vi, icon: SPORTS[k].icon, color: SPORTS[k].color })),
     byEmployee: Array.from(byEmp.values()),
     prevByEmployee,
-  });
+  };
 }

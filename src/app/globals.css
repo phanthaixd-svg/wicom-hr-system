@@ -7,10 +7,21 @@
   --mono:ui-monospace,"SF Mono",Menlo,monospace;--sans:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   --r:15px;--maxw:1040px;
 }
-@media(prefers-color-scheme:dark){:root{
+/* Dark tokens — 1 nguồn duy nhất, dùng cho cả 2 lối:
+   (a) người dùng chưa chọn thủ công  → theo OS  (media query, chỉ khi CHƯA có data-theme)
+   (b) người dùng bấm nút ngày/đêm      → theo attribute data-theme (thắng OS ở cả 2 chiều) */
+@media(prefers-color-scheme:dark){:root:not([data-theme]){
   --ground:#0b1520;--surface:#122130;--surface-2:#0e1b28;--line:#233a4c;
   --ink:#e8f0f5;--ink-2:#a7bccb;--ink-3:#6d8494;--navy:#2f6690;--blue:#4bb4e8;--blue-soft:#2a5f83;
   --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 34px rgba(0,0,0,.4);}}
+:root[data-theme="dark"]{
+  --ground:#0b1520;--surface:#122130;--surface-2:#0e1b28;--line:#233a4c;
+  --ink:#e8f0f5;--ink-2:#a7bccb;--ink-3:#6d8494;--navy:#2f6690;--blue:#4bb4e8;--blue-soft:#2a5f83;
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 12px 34px rgba(0,0,0,.4);}
+:root[data-theme="light"]{
+  --ground:#eef2f5;--surface:#fff;--surface-2:#f0f4f7;--line:#dde5eb;
+  --ink:#12222e;--ink-2:#4a5c68;--ink-3:#83919b;--navy:#1A4565;--blue:#33A3DC;--blue-soft:#7fc4e8;
+  --shadow:0 1px 2px rgba(18,34,46,.05),0 10px 30px rgba(18,34,46,.07);}
 
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}

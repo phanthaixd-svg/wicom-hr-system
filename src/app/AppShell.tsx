@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Logo from "./Logo";
 import UserMenu from "./UserMenu";
 import Dashboard from "./dashboard/Dashboard";
@@ -62,7 +62,10 @@ export default function AppShell({
 }) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [area, setArea] = useState<Area | null>(initialActivityId ? "activity" : initialArea);
+  const [activityId, setActivityId] = useState<string | null>(initialActivityId);
   const [navOpen, setNavOpen] = useState(false);
+  // Lazy-mount: chỉ dựng panel của tab đã được mở (tránh nạp dữ liệu 3 tab cùng lúc khi vừa vào).
+  const [visited, setVisited] = useState<Set<Tab>>(() => new Set<Tab>([initialTab]));
 
   const inHub = area === null;
   const canHRSetting = isAdmin || isHR;
@@ -77,15 +80,56 @@ export default function AppShell({
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
+  // ── Đồng bộ URL ⇄ trạng thái (History API) — để thanh địa chỉ luôn phản ánh đúng trang. ──
+  const urlFor = (a: Area | null, t: Tab, act: string | null): string => {
+    if (a === "me") return "/me";
+    if (a === "activity") return `/activity/${act ?? ""}`;
+    if (a === "hrsetting" || a === "records" || a === "learn" || a === "ai") return `/dashboard?area=${a}`;
+    return t === "home" ? "/dashboard" : `/dashboard?tab=${t}`;
+  };
+  const pushUrl = (a: Area | null, t: Tab, act: string | null) => {
+    const next = urlFor(a, t, act);
+    if (typeof window !== "undefined" && window.location.pathname + window.location.search !== next) {
+      window.history.pushState({ a, t, act }, "", next);
+    }
+  };
+  // Back/Forward trình duyệt → khôi phục đúng trạng thái.
+  useEffect(() => {
+    const onPop = () => {
+      const p = window.location.pathname;
+      const sp = new URLSearchParams(window.location.search);
+      const mAct = p.match(/^\/activity\/(.+)$/);
+      if (p === "/me") { setArea("me"); }
+      else if (mAct) { setActivityId(decodeURIComponent(mAct[1])); setArea("activity"); }
+      else {
+        const a = sp.get("area");
+        if (a === "hrsetting" || a === "records" || a === "learn" || a === "ai") setArea(a as Area);
+        else {
+          setArea(null);
+          const t = sp.get("tab");
+          const valid = (["home", "move", "withanks", "wigrow"] as const).includes(t as Tab) ? (t as Tab) : "home";
+          setTab(valid);
+          setVisited((s) => (s.has(valid) ? s : new Set(s).add(valid)));
+        }
+      }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   const gotoHub = (t?: Tab) => {
+    const nextTab = t ?? tab;
     setArea(null);
     if (t) setTab(t);
+    setVisited((s) => (s.has(nextTab) ? s : new Set(s).add(nextTab)));
     setNavOpen(false);
+    pushUrl(null, nextTab, activityId);
     window.scrollTo({ top: 0 });
   };
   const gotoArea = (a: Area) => {
     setArea(a);
     setNavOpen(false);
+    pushUrl(a, tab, activityId);
     window.scrollTo({ top: 0 });
   };
   const onNav = (key: "board" | Area) => (key === "board" ? gotoHub() : gotoArea(key));
@@ -149,7 +193,7 @@ export default function AppShell({
               </div>
             </button>
             <div className="top-spacer" />
-            <UserMenu meName={meName} avatarUrl={avatarUrl} isAdmin={canHRSetting} />
+            <UserMenu meName={meName} avatarUrl={avatarUrl} isAdmin={canHRSetting} onGoMe={() => gotoArea("me")} />
           </div>
 
           {inHub && (
@@ -171,15 +215,21 @@ export default function AppShell({
 
         {inHub ? (
           <>
-            <div className="wb-panel" hidden={tab !== "home"}>
-              <WicerHome />
-            </div>
-            <div className="wb-panel" hidden={tab !== "move"}>
-              <Dashboard />
-            </div>
-            <div className="wb-panel" hidden={tab !== "withanks"}>
-              <WiThanks />
-            </div>
+            {visited.has("home") && (
+              <div className="wb-panel" hidden={tab !== "home"}>
+                <WicerHome />
+              </div>
+            )}
+            {visited.has("move") && (
+              <div className="wb-panel" hidden={tab !== "move"}>
+                <Dashboard />
+              </div>
+            )}
+            {visited.has("withanks") && (
+              <div className="wb-panel" hidden={tab !== "withanks"}>
+                <WiThanks />
+              </div>
+            )}
             {tab === "wigrow" && (
               <div className="wb-ph">
                 <div className="wbph-card">
@@ -200,7 +250,7 @@ export default function AppShell({
               <div className="toolbar" style={{ marginBottom: 4 }}>
                 <a className="conn" onClick={() => gotoHub("move")} role="button" tabIndex={0}>← Về Bảng tin</a>
               </div>
-              <ActivityView id={initialActivityId ?? ""} idPrefix="page" />
+              <ActivityView id={activityId ?? ""} idPrefix="page" />
             </div>
           </div>
         ) : (
