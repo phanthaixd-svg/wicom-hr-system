@@ -8,9 +8,10 @@ import KindsTab from "./KindsTab";
 import ApprovalsTab from "./ApprovalsTab";
 import EmployeesTab from "./EmployeesTab";
 import WiThanksTab from "./WiThanksTab";
+import EconomyTab from "./EconomyTab";
 import CardsTab from "./CardsTab";
 
-type SectionKey = "employees" | "withanks" | "cards" | "campaigns" | "rules" | "kinds" | "approvals" | "general";
+type SectionKey = "employees" | "withanks" | "economy" | "cards" | "campaigns" | "rules" | "kinds" | "approvals" | "general";
 type GroupKey = "employees" | "move" | "withanks" | "cards";
 
 interface Section { key: SectionKey; label: string; icon: string }
@@ -38,7 +39,10 @@ const GROUPS: Group[] = [
   {
     key: "withanks", label: "WiThanks", icon: "🥔",
     desc: "Khoai, quà đổi thưởng & quy tắc trao lời cảm ơn.",
-    sections: [{ key: "withanks", label: "Quà & Khoai", icon: "🥔" }],
+    sections: [
+      { key: "withanks", label: "Quà & Khoai", icon: "🥔" },
+      { key: "economy", label: "Kinh tế khoai", icon: "📊" },
+    ],
   },
   {
     key: "cards", label: "Wicer Card", icon: "🎴",
@@ -51,6 +55,7 @@ function renderSection(key: SectionKey, isAdmin: boolean) {
   switch (key) {
     case "employees": return <EmployeesTab canGrantRoles={isAdmin} />;
     case "withanks": return <WiThanksTab />;
+    case "economy": return <EconomyTab />;
     case "cards": return <CardsTab />;
     case "campaigns": return <CampaignsTab />;
     case "rules": return <RulesTab />;

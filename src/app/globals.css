@@ -1910,3 +1910,29 @@ button.wh-rit:hover{border-color:var(--blue)}
 @media (prefers-reduced-motion: reduce) {
   .btn-save-goal, .btn-save, .btn-cancel, .cm-send, .appr-ok, .appr-no, .goal-add-btn { transition: none; }
 }
+
+/* ===== HR · Kinh tế khoai ===== */
+.econ-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:14px 0}
+.econ-kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:11px 13px;display:flex;flex-direction:column;gap:3px}
+.ek-lb{font-size:11.5px;color:var(--ink-3)}
+.ek-val{font-size:17px;color:var(--ink)}
+.econ-tools{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
+.econ-search{flex:1;min-width:160px;font-size:13px;padding:8px 11px;border-radius:9px;border:1px solid var(--line);background:var(--ground);color:var(--ink)}
+.econ-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.econ-table{border-collapse:collapse;width:100%;font-size:13px;min-width:900px}
+.econ-table th,.econ-table td{padding:9px 12px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
+.econ-table th{position:sticky;top:0;background:var(--surface-2);color:var(--ink-2);font-weight:600;font-size:12px;z-index:1}
+.econ-table th:first-child,.econ-table td:first-child{text-align:left}
+.econ-table th.sortable{cursor:pointer;user-select:none}
+.econ-table th.sortable:hover{color:var(--blue)}
+.econ-table td.num{font-variant-numeric:tabular-nums}
+.econ-table td.strong{font-weight:700;color:var(--blue)}
+.econ-table td.muted{color:var(--ink-3)}
+.econ-table td.num.muted{color:var(--ink-3)}
+.sticky-col{position:sticky;left:0;background:var(--surface);z-index:2}
+.econ-table th.sticky-col{z-index:3}
+.econ-emp{display:flex;align-items:center;gap:9px}
+.econ-emp b{font-size:13px;display:block;line-height:1.2}
+.econ-emp small{font-size:11px;color:var(--ink-3)}
+.econ-table tfoot .econ-total td{border-top:2px solid var(--line);border-bottom:none;font-weight:700;background:var(--surface-2);position:sticky;bottom:0}
+.econ-table tfoot .econ-total td.sticky-col{background:var(--surface-2)}
