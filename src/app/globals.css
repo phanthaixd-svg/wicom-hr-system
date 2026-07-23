@@ -1952,3 +1952,12 @@ button.wh-rit:hover{border-color:var(--blue)}
 .m4-strava{padding:0 14px 6px;margin-top:-2px}
 .m4m-strava-credit{display:flex;justify-content:center;padding:10px 0 4px;opacity:.85}
 .ca-foot{display:flex;justify-content:flex-end;padding:8px 14px 12px;opacity:.85}
+/* Powered by Strava: chọn bản cam (nền sáng) / trắng (nền tối) — asset gốc, không sửa hình. */
+.pbs{display:inline-flex;align-items:center;line-height:0}
+.pbs .pbs-dark{display:none}
+:root[data-theme="dark"] .pbs .pbs-light{display:none}
+:root[data-theme="dark"] .pbs .pbs-dark{display:inline-block}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme]) .pbs .pbs-light{display:none}
+  :root:not([data-theme]) .pbs .pbs-dark{display:inline-block}
+}

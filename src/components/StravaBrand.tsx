@@ -8,7 +8,8 @@ import { useState } from "react";
 // - Nơi hiển thị dữ liệu Strava nên gắn logo "Powered by Strava".
 // Đặt file asset chính thức vào public/strava/ (xem public/strava/README.md).
 const CONNECT_BTN = "/strava/btn_strava_connect_orange.svg";
-const POWERED_BY = "/strava/powered_by_strava_horiz.svg";
+const POWERED_BY = "/strava/powered_by_strava_horiz.svg"; // bản cam — nền sáng
+const POWERED_BY_WHITE = "/strava/powered_by_strava_horiz_white.svg"; // bản trắng — nền tối
 
 // Nút "Connect with Strava" — asset gốc, không chỉnh sửa.
 export function ConnectWithStrava({ href = "/api/strava/connect", className = "" }: { href?: string; className?: string }) {
@@ -41,17 +42,16 @@ export function ViewOnStrava({ stravaId, className = "" }: { stravaId?: string |
 }
 
 // Logo "Powered by Strava" cho khu vực hiển thị dữ liệu Strava.
+// Render cả 2 bản (cam / trắng), CSS chọn bản hợp nền theo giao diện sáng-tối.
 export function PoweredByStrava({ className = "" }: { className?: string }) {
   const [broken, setBroken] = useState(false);
   if (broken) return <span className={`powered-by-strava-txt ${className}`}>Powered by Strava</span>;
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      className={`powered-by-strava ${className}`}
-      src={POWERED_BY}
-      alt="Powered by Strava"
-      height={20}
-      onError={() => setBroken(true)}
-    />
+    <span className={`pbs ${className}`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="powered-by-strava pbs-light" src={POWERED_BY} alt="Powered by Strava" height={20} onError={() => setBroken(true)} />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="powered-by-strava pbs-dark" src={POWERED_BY_WHITE} alt="" aria-hidden="true" height={20} />
+    </span>
   );
 }
