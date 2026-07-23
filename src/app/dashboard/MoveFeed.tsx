@@ -7,10 +7,11 @@ import SubmitActivity from "../me/SubmitActivity";
 import Reactions from "./Reactions";
 import Comments from "../activity/[id]/Comments";
 import type { ReactionGroup } from "@/lib/reactions";
+import { ViewOnStrava, PoweredByStrava } from "@/components/StravaBrand";
 
 interface FeedItem {
   id: string; sport: string; kindKey?: string | null; icon: string; kindName?: string | null; name: string;
-  km: number; timeS: number; dateISO: string; amountVnd: number; pending: boolean;
+  km: number; timeS: number; dateISO: string; amountVnd: number; pending: boolean; stravaId?: string | null;
   who: { id: string; name: string; team: string; avatarUrl: string | null };
   routePath: string | null;
   reactions: ReactionGroup[]; commentCount: number; topComment: { name: string; body: string } | null;
@@ -118,6 +119,8 @@ export default function MoveFeed({ onOpenProfile }: { onOpenProfile: (id: string
                   <span className="m4-tic">{a.icon}</span>
                   <span className="m4-tnm">{a.name}</span>
                 </div>
+                {/* Hoạt động đồng bộ từ Strava -> link nguồn theo brand guidelines. */}
+                {a.stravaId && <div className="m4-strava"><ViewOnStrava stravaId={a.stravaId} /></div>}
 
                 <div className={`m4-body${a.routePath ? " has-map" : ""}`}>
                   <div className="m4-statcol">
@@ -212,6 +215,9 @@ export default function MoveFeed({ onOpenProfile }: { onOpenProfile: (id: string
           <SubmitActivity onDone={load} />
         </div>
         <p className="m4m-add-hint">Có buổi tập chưa lên Strava? Gửi tay để được ghi nhận vào quỹ.</p>
+
+        {/* Ghi nhận nguồn dữ liệu theo Strava Brand Guidelines. */}
+        <div className="m4m-strava-credit"><PoweredByStrava /></div>
       </aside>
 
       {openId && <ActivityModal id={openId} onClose={() => setOpenId(null)} />}

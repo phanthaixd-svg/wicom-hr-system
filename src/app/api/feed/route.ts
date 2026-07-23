@@ -37,6 +37,8 @@ export async function GET(req: NextRequest) {
       timeS: a.movingTimeS,
       amountVnd: a.amountVnd,
       pending: a.isFlagged,
+      // Nguồn Strava -> để hiển thị link "View on Strava" (bắt buộc theo brand guidelines).
+      stravaId: a.source === "strava" ? a.stravaId : null,
       who: { id: a.employee.id, name: a.employee.name, team: a.employee.team ?? "Wicom", avatarUrl: a.employee.avatarUrl },
     };
   });

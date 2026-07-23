@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ConnectWithStrava, PoweredByStrava } from "@/components/StravaBrand";
 
 // Quản lý app đã kết nối của user. Hiện tại: Strava (đọc hoạt động).
 export default function ConnectApps({ connected, onChange }: { connected: boolean; onChange: () => void }) {
@@ -33,10 +34,12 @@ export default function ConnectApps({ connected, onChange }: { connected: boolea
         ) : (
           <div className="ca-right">
             <span className="ca-badge off">Chưa kết nối</span>
-            <a className="ca-btn on" href="/api/strava/connect">Kết nối</a>
+            {/* Asset chính thức theo Strava Brand Guidelines */}
+            <ConnectWithStrava href="/api/strava/connect" />
           </div>
         )}
       </div>
+      <div className="ca-foot"><PoweredByStrava /></div>
     </div>
   );
 }

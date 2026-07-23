@@ -93,6 +93,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       rejected,
       rejectReason: act.rejectReason,
       manual: true,
+      stravaId: null,
       proofUrl: act.proofUrl,
       note: act.note,
       distanceKm: act.distanceKm,
@@ -162,6 +163,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     pending: act.isFlagged,
     rejected: false,
     manual: false,
+    stravaId: act.stravaId, // để hiển thị link "View on Strava" (brand guidelines)
     proofUrl: null,
     note: null,
     distanceKm: act.distanceKm,

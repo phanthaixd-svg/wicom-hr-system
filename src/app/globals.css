@@ -1936,3 +1936,19 @@ button.wh-rit:hover{border-color:var(--blue)}
 .econ-emp small{font-size:11px;color:var(--ink-3)}
 .econ-table tfoot .econ-total td{border-top:2px solid var(--line);border-bottom:none;font-weight:700;background:var(--surface-2);position:sticky;bottom:0}
 .econ-table tfoot .econ-total td.sticky-col{background:var(--surface-2)}
+
+/* ===== Strava brand compliance (developers.strava.com/guidelines) ===== */
+/* Nút "Connect with Strava": dùng asset gốc, KHÔNG bo góc/đổi màu/kéo méo. */
+.strava-connect{display:inline-block;line-height:0}
+.strava-connect img{height:48px;width:auto;display:block}
+.strava-connect-wrap{display:flex;justify-content:center;margin:14px 0 6px}
+/* Link "View on Strava" — cam #FC5200, đậm + gạch chân theo yêu cầu. */
+.view-on-strava{color:#FC5200;font-weight:700;text-decoration:underline;font-size:12.5px;white-space:nowrap}
+.view-on-strava:hover{opacity:.85}
+/* Logo "Powered by Strava" */
+.powered-by-strava{height:20px;width:auto;display:inline-block;vertical-align:middle}
+.powered-by-strava-txt{font-size:11px;font-weight:700;color:var(--ink-3);letter-spacing:.02em}
+.ad-strava{display:flex;align-items:center;gap:10px;margin-top:6px}
+.m4-strava{padding:0 14px 6px;margin-top:-2px}
+.m4m-strava-credit{display:flex;justify-content:center;padding:10px 0 4px;opacity:.85}
+.ca-foot{display:flex;justify-content:flex-end;padding:8px 14px 12px;opacity:.85}

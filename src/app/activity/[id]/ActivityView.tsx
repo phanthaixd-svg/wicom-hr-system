@@ -5,11 +5,13 @@ import RouteMap from "./RouteMap";
 import Reactions from "../../dashboard/Reactions";
 import Comments from "./Comments";
 import type { ReactionGroup } from "@/lib/reactions";
+import { ViewOnStrava, PoweredByStrava } from "@/components/StravaBrand";
 
 interface Split { km: number; meters: number; timeS: number; elevDiff: number; }
 export interface Detail {
   name: string; sportKey: string; icon: string; sportVi: string; dateISO: string; pending: boolean;
   rejected?: boolean; rejectReason?: string | null; manual?: boolean; proofUrl?: string | null; note?: string | null;
+  stravaId?: string | null;
   distanceKm: number; movingTimeS: number; elapsedTimeS: number; elevationGain: number;
   hasHr: boolean; avgHr: number | null; maxHr: number | null; cadence: number | null;
   calories: number | null; avgWatts: number | null; kudos: number; achievements: number;
@@ -123,6 +125,10 @@ export default function ActivityView({ id, idPrefix = "v" }: { id: string; idPre
             {d.manual && <span className="status s-manual" style={{ marginLeft: 6 }}>Gửi tay</span>}
             <span className={`status ${statusClass}`} style={{ marginLeft: 6 }}>{statusLabel}</span>
           </p>
+          {/* Dữ liệu nguồn từ Strava -> bắt buộc link về Strava (brand guidelines). */}
+          {d.stravaId && (
+            <p className="ad-strava"><ViewOnStrava stravaId={d.stravaId} /> <PoweredByStrava /></p>
+          )}
         </div>
         <div className="ad-fund-n">
           <span className="afn-lb">Quỹ tạo ra</span>

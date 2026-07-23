@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { prisma } from "@/lib/db";
 import Logo from "../Logo";
+import { ConnectWithStrava } from "@/components/StravaBrand";
 
 const ERRORS: Record<string, string> = {
   denied: "Bạn đã từ chối cấp quyền Strava. Cần cấp quyền để tham gia gây quỹ.",
@@ -55,9 +56,10 @@ export default async function ConnectPage({
           <li>Nhận hoạt động mới tự động qua Strava</li>
           <li>Không đăng bài, không sửa dữ liệu của bạn</li>
         </div>
-        <a className="btn btn-strava" href="/api/strava/connect">
-          ⛰️ Cấp quyền với Strava
-        </a>
+        {/* Nút asset chính thức theo Strava Brand Guidelines (bắt buộc để pass API review). */}
+        <div className="strava-connect-wrap">
+          <ConnectWithStrava href="/api/strava/connect" />
+        </div>
         <a className="btn-skip" href="/dashboard">
           Để sau, vào khám phá trước →
         </a>
