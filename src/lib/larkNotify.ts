@@ -141,7 +141,7 @@ const mkCard = (color: string, title: string, elements: El[]): unknown => ({
   header: { template: color, title: { tag: "plain_text", content: title } },
   elements,
 });
-const BRAND = "🌱 Wicer · WiThanks";
+const BRAND = "❤️ WiThanks";
 
 // Gửi card, nếu Lark từ chối thì fallback về text.
 async function sendCard(openId: string, card: unknown, fallbackText: string): Promise<boolean> {
@@ -160,7 +160,7 @@ export async function notifyThanksReceived(openId: string, o: { giverName: strin
       mdEl(`💬 *"${o.message}"*`),
       hrEl(),
       noteEl("🎁 HR sẽ liên hệ để trao món quà thật tới bạn."),
-      btnEl("Xem WiThanks →", tabUrl("withanks")),
+      btnEl("WiThanks →", tabUrl("withanks")),
     ]);
     return sendCard(openId, card, `🎁 ${o.giverName} vừa tặng bạn một Special Gift: "${o.message}". HR sẽ liên hệ trao quà thật. 💛`);
   }
@@ -177,9 +177,9 @@ export async function notifyThanksReceived(openId: string, o: { giverName: strin
         : `**${o.giverName}** vừa gửi tặng bạn **${o.khoai} 🥔**`),
       mdEl(`💬 *"${o.message}"*`),
       hrEl(),
-      fieldsEl(giaTri, `**🥔 Ví khoai**\n${o.totalBalance} 🥔`),
+      fieldsEl(giaTri, `**Ví khoai của bạn**\n${o.totalBalance} 🥔`),
       noteEl(BRAND),
-      btnEl("Cảm ơn lại →", tabUrl("withanks")),
+      btnEl("WiThanks →", tabUrl("withanks")),
     ],
   );
   return sendCard(openId, card, `🥔 Bạn vừa nhận được ${o.khoai} khoai từ ${o.giverName} với lời cảm ơn: "${o.message}". Ví: ${o.totalBalance} 🥔.`);
