@@ -33,7 +33,7 @@ button{font-family:inherit;cursor:pointer}
 .hidden{display:none!important}
 
 /* ===== auth ===== */
-.auth{min-height:100vh;display:grid;place-items:center;padding:24px;
+.auth{min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:24px;
   background:radial-gradient(120% 120% at 50% -10%,color-mix(in srgb,var(--blue) 22%,transparent),transparent 55%),var(--ground)}
 .auth-card{width:100%;max-width:410px;background:var(--surface);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);padding:34px 30px;text-align:center}
 .brand{display:flex;align-items:center;justify-content:center;gap:11px;margin-bottom:22px}
@@ -904,11 +904,11 @@ a.act:hover .at{color:var(--blue)}
 .badge-locked{font-size:11.5px;font-weight:600;color:var(--ink-3)}
 
 /* ═══════════ Khung điều hướng 3 tầng: Rail → Sidebar → Header/Tab ═══════════ */
-.app-shell{display:flex;align-items:flex-start;min-height:100vh}
-.maincol{flex:1;min-width:0;min-height:100vh;background:var(--ground);color:var(--ink)}
+.app-shell{display:flex;align-items:flex-start;min-height:100vh;min-height:100dvh}
+.maincol{flex:1;min-width:0;min-height:100vh;min-height:100dvh;background:var(--ground);color:var(--ink)}
 
 /* RAIL — chuyển workspace (luôn tối) */
-.rail{position:sticky;top:0;height:100vh;flex:none;width:60px;z-index:50;background:var(--navy);
+.rail{position:sticky;top:0;height:100vh;height:100dvh;flex:none;width:60px;z-index:50;background:var(--navy);
   display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:6px}
 .rail-mark{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:#fff;
   margin-bottom:8px;box-shadow:0 4px 12px rgba(0,0,0,.22);overflow:hidden}
@@ -922,7 +922,7 @@ a.act:hover .at{color:var(--blue)}
   width:4px;height:22px;border-radius:0 4px 4px 0;background:#fff}
 
 /* SIDEBAR — danh sách Page */
-.sidebar{position:sticky;top:0;height:100vh;flex:none;width:224px;z-index:45;background:var(--surface);
+.sidebar{position:sticky;top:0;height:100vh;height:100dvh;flex:none;width:224px;z-index:45;background:var(--surface);
   border-right:1px solid var(--line);overflow-y:auto;display:flex;flex-direction:column}
 .sb-head{display:flex;align-items:center;gap:10px;padding:15px 16px 14px;border-bottom:1px solid var(--line)}
 .sb-home{width:100%;border:0;background:none;cursor:pointer;font-family:inherit;text-align:left;transition:background .12s}
@@ -1961,3 +1961,52 @@ button.wh-rit:hover{border-color:var(--blue)}
   :root:not([data-theme]) .pbs .pbs-light{display:none}
   :root:not([data-theme]) .pbs .pbs-dark{display:inline-block}
 }
+
+/* ===================================================================
+   LỚP A — Mobile-native trong webview Lark (bundle +0KB)
+   =================================================================== */
+
+/* Không auto-phóng chữ khi xoay ngang; chặn kéo quá đà lộ nền webview. */
+html{-webkit-text-size-adjust:100%}
+body{overscroll-behavior-y:none}
+
+/* Bỏ flash xám khi chạm -> cảm giác app native thay vì web. */
+a,button,[role="button"],input,select,textarea,
+.wb-tab,.sb-item,.settab,.subtab,.seg button,.rail-app{-webkit-tap-highlight-color:transparent}
+
+/* Cuộn mượt kiểu native ở các vùng cuộn. */
+.modal-overlay,.wb-panel,.econ-scroll{-webkit-overflow-scrolling:touch}
+.econ-scroll{touch-action:pan-x pan-y}
+
+/* Safe-area: tai thỏ (trên) + thanh home iPhone (dưới) khi mở trong Lark. */
+.wb-top{padding-top:env(safe-area-inset-top)}
+.maincol{padding-bottom:env(safe-area-inset-bottom)}
+.rail,.sidebar{padding-bottom:env(safe-area-inset-bottom)}
+.auth{padding-top:calc(24px + env(safe-area-inset-top));padding-bottom:calc(24px + env(safe-area-inset-bottom))}
+
+/* Thiết bị cảm ứng: vùng chạm tối thiểu 44px (chuẩn iOS/Lark). */
+@media (pointer:coarse){
+  button,.btn,a.btn,.wb-tab,.sb-item,.settab,.subtab,.ca-btn,.seg button,.um-item{min-height:44px}
+  .modal-close{width:40px;height:40px}
+}
+
+/* Modal -> BOTTOM SHEET trên mobile (đúng pattern Lark/iOS): trượt từ dưới lên,
+   bo góc trên, có thanh kéo, chừa safe-area đáy. */
+@media (max-width:560px){
+  .modal-overlay{padding:0;align-items:flex-end}
+  .modal-panel{
+    border-radius:18px 18px 0 0;border-bottom:none;
+    max-height:92dvh;overflow-y:auto;
+    padding-bottom:calc(18px + env(safe-area-inset-bottom));
+    animation:wm-sheet-up .22s cubic-bezier(.2,.7,.2,1);
+  }
+  /* Thanh kéo (grabber) như bottom sheet native */
+  .modal-panel::before{
+    content:"";display:block;width:38px;height:4px;border-radius:999px;
+    background:var(--line);margin:8px auto 6px;flex:none;
+  }
+  .modal-panel.wrap{padding:0 16px calc(18px + env(safe-area-inset-bottom))}
+  .modal-panel.wrap::before{margin-bottom:12px}
+}
+@keyframes wm-sheet-up{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@media (prefers-reduced-motion:reduce){.modal-panel{animation:none}}
